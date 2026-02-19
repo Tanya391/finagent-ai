@@ -1,0 +1,9 @@
+﻿{
+  "name": "finagent-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "echo Frontend scaffold ready",
+    "build": "echo Build step not configured yet"
+  }
+}
