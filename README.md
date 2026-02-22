@@ -21,6 +21,25 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Sprint 1 verification
+Run these checks before committing Sprint 1:
+
+```bash
+cd backend
+python manage.py test transactions
+python manage.py runserver
+```
+
+Then call:
+
+`GET /api/ingest/`
+
+Expected response includes:
+- `report.inserted_count`
+- `report.duplicate_count`
+- `report.invalid_count`
+- `report.invalid_rows`
+
 ## Git
 ```bash
 git add .
