@@ -1,27 +1,42 @@
-from django.http import JsonResponse
+from pathlib import Path
+
 from django.conf import settings
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+
 from .services import ingest_csv
-import os
 from .utils import get_db
 
-# Create your views here.
 
-def test_ingestion(request):
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    file_path = os.path.join(root_dir,"data","sample_transactions.csv")
+SAMPLE_CSV_PATH = Path(settings.BASE_DIR).parent / "data" / "sample_transactions.csv"
+
+
+@require_GET
+def health(request):
+    return JsonResponse({"status": "ok"})
+
+
+@require_GET
+def ingest_sample_transactions(request):
+    if not SAMPLE_CSV_PATH.exists():
+        return JsonResponse(
+            {"error": f"Sample CSV not found at: {SAMPLE_CSV_PATH}"},
+            status=404,
+        )
 
     try:
-        report = ingest_csv(file_path, return_report=True)
+        report = ingest_csv(str(SAMPLE_CSV_PATH), return_report=True)
         return JsonResponse(
             {
                 "message": f"{report['inserted_count']} records inserted successfully",
                 "report": report,
             }
         )
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-    
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
 
+
+@require_GET
 def get_summary(request):
     db = get_db()
     collection = db[settings.MONGO_TRANSACTIONS_COLLECTION]

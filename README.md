@@ -1,19 +1,19 @@
-﻿# FinAgent AI
+# FinAgent AI (Backend-First)
 
-Sprint-based personal finance assistant project.
+Beginner-friendly personal finance backend using Django + MongoDB.
 
-## Structure
-- `backend/`: Django + Mongo integration
-- `frontend/`: React app scaffold
-- `data/`: static CSV transaction data
-- `scripts/`: helper scripts
+## What This Project Includes
+- CSV ingestion API for bank-like transactions
+- Summary API by transaction type and category
+- Optional embedding generation scripts
 
-## First commit checklist
-1. Copy `backend/.env.example` to `backend/.env` and set values.
-2. Do not commit any real `.env` files.
-3. Add your static CSV in `data/`.
+## Project Structure
+- `backend/`: Django API + MongoDB integration
+- `data/`: sample CSV files
+- `scripts/`: helper scripts for generating CSV and embeddings
+- `frontend/`: intentionally removed placeholder app (see `frontend/README.md`)
 
-## Quick start (backend)
+## 1. Setup
 ```bash
 cd backend
 python -m venv venv
@@ -21,27 +21,42 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Sprint 1 verification
-Run these checks before committing Sprint 1:
-
+Copy env template:
 ```bash
-cd backend
-python manage.py test transactions
+copy .env.example .env
+```
+
+Minimum required env values:
+- `MONGO_URI`
+- `DB_NAME`
+
+## 2. Run Backend
+```bash
 python manage.py runserver
 ```
 
-Then call:
+## 3. API Endpoints
+- `GET /api/health/` -> basic health check
+- `GET /api/ingest/` -> ingests `data/sample_transactions.csv`
+- `GET /api/summary/` -> returns spend/income summary
 
-`GET /api/ingest/`
-
-Expected response includes:
-- `report.inserted_count`
-- `report.duplicate_count`
-- `report.invalid_count`
-- `report.invalid_rows`
-
-## Git
+## 4. Tests
 ```bash
-git add .
-git commit -m "Initial scaffold"
+python manage.py test transactions -v 2
+```
+
+## 5. Helper Scripts (from project root)
+Generate sample CSV:
+```bash
+python scripts/generate_transactions.py
+```
+
+Generate embeddings for documents that do not have embeddings:
+```bash
+python scripts/generate_embeddings.py
+```
+
+Force-regenerate embeddings for all records:
+```bash
+python scripts/generate_embeddings.py --force
 ```
