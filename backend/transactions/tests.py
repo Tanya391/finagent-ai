@@ -1,10 +1,11 @@
 import csv
+import json
 import os
 import tempfile
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import Client, SimpleTestCase
 from pymongo.errors import DuplicateKeyError
 
 from . import services
@@ -151,3 +152,74 @@ class IngestionServiceTests(SimpleTestCase):
         docs = fake_db[settings.MONGO_TRANSACTIONS_COLLECTION].docs
         self.assertEqual(len(docs[0]["transaction_id"]), 64)
         self.assertTrue(all(c in "0123456789abcdef" for c in docs[0]["transaction_id"]))
+
+
+class RagEndpointTests(SimpleTestCase):
+    def setUp(self):
+        self.client = Client()
+
+    @patch("transactions.views.retrieve_transactions_for_query")
+    def test_retrieve_endpoint_returns_results(self, mock_retrieve):
+        mock_retrieve.return_value = [
+            {
+                "transaction_id": "tx-1",
+                "receiver": "Swiggy",
+                "description": "Online Payment",
+                "score": 0.61,
+            }
+        ]
+
+        response = self.client.post(
+            "/api/retrieve/",
+            data=json.dumps({"question": "food", "k": 3}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["results"][0]["transaction_id"], "tx-1")
+        mock_retrieve.assert_called_once_with(question="food", top_k=3)
+
+    @patch("transactions.views.answer_question_with_context")
+    @patch("transactions.views.retrieve_transactions_for_query")
+    def test_ask_endpoint_returns_answer_and_sources(self, mock_retrieve, mock_answer):
+        mock_retrieve.return_value = [
+            {
+                "transaction_id": "tx-2",
+                "receiver": "Landlord",
+                "description": "House Rent",
+                "score": 0.88,
+            }
+        ]
+        mock_answer.return_value = {
+            "answer": "Based on your recent expenses, this looks tight.",
+            "provider_used": "groq",
+            "model_used": "llama-3.1-8b-instant",
+            "fallback_count": 0,
+            "provider_errors": [],
+        }
+
+        response = self.client.post(
+            "/api/ask/",
+            data=json.dumps({"question": "Can I buy a phone?", "k": 2}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("answer", payload)
+        self.assertEqual(payload["provider_used"], "groq")
+        self.assertEqual(payload["source_count"], 1)
+        self.assertEqual(payload["sources"][0]["transaction_id"], "tx-2")
+        mock_retrieve.assert_called_once_with(question="Can I buy a phone?", top_k=2)
+        mock_answer.assert_called_once()
+
+    def test_ask_endpoint_requires_question(self):
+        response = self.client.post(
+            "/api/ask/",
+            data=json.dumps({"question": "", "k": 2}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())

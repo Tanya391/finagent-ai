@@ -35,6 +35,25 @@ MONGO_CONNECT_TIMEOUT_MS = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "20000"))
 MONGO_SOCKET_TIMEOUT_MS = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 VECTOR_INDEX_NAME = os.getenv("VECTOR_INDEX_NAME", "transactions_vector_index")
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "8"))
+LLM_FALLBACK_ORDER = _env_csv("LLM_FALLBACK_ORDER", "groq,huggingface")
+
+# Groq
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
+# Hugging Face Inference Providers (OpenAI-compatible endpoint)
+HF_API_KEY = os.getenv("HF_API_KEY", "").strip()
+HF_MODEL = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+HF_BASE_URL = os.getenv("HF_BASE_URL", "https://router.huggingface.co/v1/chat/completions").strip()
+
+
+# Legacy Gemini settings (optional fallback if you include gemini in LLM_FALLBACK_ORDER)
+# LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+# LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
+# GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
+
+LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "25"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
