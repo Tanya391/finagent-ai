@@ -1,10 +1,10 @@
-# Frontend Status
+# Frontend
 
-Frontend implementation is intentionally removed for now to keep this project beginner-friendly.
+React + Vite + Tailwind CSS setup for Sprint 4.
 
-Current focus:
-- Backend ingestion API
-- MongoDB summary API
-- Embedding generation scripts
+## Run locally
 
-When needed, add a fresh frontend app from scratch rather than maintaining empty placeholder files.
+```bash
+npm install
+npm run dev
+```
