@@ -1,6 +1,15 @@
+"""
+Transaction ingestion service.
+
+Changes from v1:
+  - Uses hybrid categorizer (merchant map + regex) instead of simple regex
+  - Stores normalized_merchant on each document
+  - Stores user_id if provided
+  - Upserts vector into Qdrant after MongoDB insert
+"""
+
 import csv
 import hashlib
-import re
 from datetime import date
 from typing import Literal
 
@@ -9,26 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from pymongo.errors import DuplicateKeyError
 
 from .utils import get_db
-
-
-INCOME_PATTERNS = [
-    re.compile(r"\bsalary\b", re.IGNORECASE),
-    re.compile(r"\bbonus\b", re.IGNORECASE),
-    re.compile(r"\brefund\b", re.IGNORECASE),
-    re.compile(r"\binterest\b", re.IGNORECASE),
-    re.compile(r"\bdividend\b", re.IGNORECASE),
-]
-
-FIXED_EXPENSE_PATTERNS = [
-    re.compile(r"\brent\b", re.IGNORECASE),
-    re.compile(r"\belectricity\b", re.IGNORECASE),
-    re.compile(r"\bwater\b", re.IGNORECASE),
-    re.compile(r"\bgas\b", re.IGNORECASE),
-    re.compile(r"\binternet\b", re.IGNORECASE),
-    re.compile(r"\bmobile recharge\b", re.IGNORECASE),
-    re.compile(r"\bemi\b", re.IGNORECASE),
-    re.compile(r"\binsurance\b", re.IGNORECASE),
-]
+from .categorizer import categorize_transaction
+from .merchant_normalizer import normalize_merchant
+from embeddings.embedding_service import generate_embedding
 
 
 class TransactionRowSchema(BaseModel):
@@ -72,22 +64,21 @@ def generate_transaction_id(row: TransactionRowSchema) -> str:
     return hashlib.sha256(unique_string.encode("utf-8")).hexdigest()
 
 
-def classify_transaction(row: TransactionRowSchema) -> str:
-    combined_text = f"{row.receiver} {row.description}"
-    if row.transaction_type == "credit" or any(p.search(combined_text) for p in INCOME_PATTERNS):
-        return "Income"
-    if any(p.search(combined_text) for p in FIXED_EXPENSE_PATTERNS):
-        return "Fixed_Expense"
-    return "Discretionary"
-
-
 def _resolve_transaction_id(row: TransactionRowSchema) -> str:
     if row.transaction_id and row.transaction_id.strip():
         return row.transaction_id.strip()
     return generate_transaction_id(row)
 
 
-def ingest_csv(file_path: str, return_report: bool = False):
+def ingest_csv(file_path: str, return_report: bool = False, user_id: str | None = None):
+    """
+    Ingest a CSV file of transactions into MongoDB and Qdrant.
+
+    Args:
+        file_path: Path to the CSV file.
+        return_report: If True, return a detailed ingestion report dict.
+        user_id: Optional user ID to associate transactions with a specific user.
+    """
     db = get_db()
     collection = db[settings.MONGO_TRANSACTIONS_COLLECTION]
 
@@ -114,22 +105,55 @@ def ingest_csv(file_path: str, return_report: bool = False):
                 continue
 
             transaction_id = _resolve_transaction_id(row)
+            normalized = normalize_merchant(row.receiver)
+            category = categorize_transaction(row.receiver, row.description, row.transaction_type)
+
             transaction = {
                 "transaction_id": transaction_id,
                 "date": row.date.isoformat(),
                 "receiver": row.receiver,
+                "normalized_merchant": normalized,
                 "description": row.description,
                 "amount": row.amount,
                 "transaction_type": row.transaction_type,
                 "balance": row.balance,
-                "category": classify_transaction(row),
+                "category": category,
             }
 
+            if user_id:
+                transaction["user_id"] = user_id
+
+            # Generate embedding
+            embedding = None
+            try:
+                embedding = generate_embedding(f"{row.receiver} {row.description}")
+                transaction["embedding"] = embedding
+            except Exception:
+                transaction["embedding"] = None
+
+            # Insert into MongoDB
             try:
                 collection.insert_one(transaction)
                 report["inserted_count"] += 1
             except DuplicateKeyError:
                 report["duplicate_count"] += 1
+                continue
+
+            # Upsert into Qdrant (non-blocking — failure doesn't stop ingestion)
+            if embedding:
+                try:
+                    from .qdrant_service import upsert_vector
+                    upsert_vector(
+                        transaction_id=transaction_id,
+                        vector=embedding,
+                        user_id=user_id,
+                        category=category,
+                        normalized_merchant=normalized,
+                        transaction_type=row.transaction_type,
+                        transaction_date=row.date.isoformat(),
+                    )
+                except Exception:
+                    pass  # Qdrant failure doesn't block ingestion
 
     if return_report:
         return report

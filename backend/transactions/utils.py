@@ -7,21 +7,32 @@ _INDEXES_READY = False
 
 
 def reset_client_cache():
+    """Clear the cached Mongo client and index flag when a client exists.
+    If no client has been initialized, raise to avoid forcing an unnecessary
+    reconnect on the next call.
+    """
     global _CLIENT, _INDEXES_READY
+    if _CLIENT is None:
+        raise RuntimeError("Mongo client is not initialized; nothing to reset.")
+
     _CLIENT = None
     _INDEXES_READY = False
 
 
 def _build_tls_kwargs(mongo_uri: str) -> dict:
+    """Assemble connection options for MongoClient."""
     kwargs = {
         "serverSelectionTimeoutMS": settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
         "connectTimeoutMS": settings.MONGO_CONNECT_TIMEOUT_MS,
         "socketTimeoutMS": settings.MONGO_SOCKET_TIMEOUT_MS,
     }
 
+    # Extra TLS tweaks only matter for MongoDB Atlas URLs (mongodb+srv://).
     if mongo_uri.startswith("mongodb+srv://"):
         allow_invalid_certs = settings.MONGO_TLS_ALLOW_INVALID_CERTS
         disable_ocsp = settings.MONGO_TLS_DISABLE_OCSP
+
+        # If both toggles are on, prefer OCSP checks over allowing invalid certs.
         if allow_invalid_certs and disable_ocsp:
             disable_ocsp = False
 
@@ -30,6 +41,7 @@ def _build_tls_kwargs(mongo_uri: str) -> dict:
         elif disable_ocsp:
             kwargs["tlsDisableOCSPEndpointCheck"] = True
 
+        # Try to supply a CA bundle so TLS works even when the system store is missing roots.
         try:
             import certifi
 
@@ -52,9 +64,8 @@ def _build_client():
 
     for mongo_uri in uris_to_try:
         kwargs = _build_tls_kwargs(mongo_uri)
-        client = MongoClient(mongo_uri, **kwargs)
-
         try:
+            client = MongoClient(mongo_uri, **kwargs)
             client.admin.command("ping")
             return client
         except Exception as primary_error:
@@ -69,21 +80,15 @@ def _build_client():
             relaxed_kwargs.pop("tlsDisableOCSPEndpointCheck", None)
             relaxed_kwargs.pop("tlsCAFile", None)
 
-            relaxed_client = MongoClient(mongo_uri, **relaxed_kwargs)
             try:
+                relaxed_client = MongoClient(mongo_uri, **relaxed_kwargs)
                 relaxed_client.admin.command("ping")
                 return relaxed_client
             except Exception as relaxed_error:
                 last_error = relaxed_error
                 continue
 
-    raise RuntimeError(
-        "Could not connect to MongoDB. "
-        "If you are using Atlas, ensure your current IP is allowed in Atlas Network Access and "
-        "set MONGO_TLS_DISABLE_OCSP=true in backend/.env. "
-        "You can also set MONGO_URI_FALLBACK=mongodb://127.0.0.1:27017 to use local MongoDB. "
-        f"Last error: {last_error}"
-    ) from last_error
+    raise RuntimeError("Database connection failed; please verify MongoDB is reachable.") from last_error
 
 
 def get_db():
@@ -108,6 +113,13 @@ def get_db():
         collection.create_index("date")
         collection.create_index("receiver")
         collection.create_index("category")
+        # New indexes for analytics + user-scoped retrieval
+        collection.create_index("user_id")
+        collection.create_index("normalized_merchant")
+        collection.create_index("transaction_type")
+        collection.create_index([("user_id", 1), ("date", -1)])
+        collection.create_index([("user_id", 1), ("category", 1)])
+        collection.create_index([("user_id", 1), ("normalized_merchant", 1)])
         _INDEXES_READY = True
 
     return db

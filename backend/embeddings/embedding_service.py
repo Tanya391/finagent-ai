@@ -1,12 +1,13 @@
-from functools import lru_cache
-
 from django.conf import settings
 from sentence_transformers import SentenceTransformer
 
 
-@lru_cache(maxsize=1)
+_model = None
 def _get_model():
-    return SentenceTransformer(settings.EMBEDDING_MODEL)
+    global _model#updates _model
+    if _model is None:
+        _model = SentenceTransformer(settings.EMBEDDING_MODEL)
+    return _model
 
 
 def generate_embedding(text: str):

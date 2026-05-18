@@ -20,6 +20,7 @@ env/
 # Django
 backend/staticfiles/
 backend/media/
+backend/help
 
 # Environment files
 .env

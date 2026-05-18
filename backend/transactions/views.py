@@ -1,131 +1,338 @@
-import json
-from pathlib import Path
+"""
+API Views — wired to query parser, query router, hybrid retrieval, and analytics engine.
+"""
 
-from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.contrib.auth.models import User
+from pymongo.errors import AutoReconnect, ConnectionFailure, NetworkTimeout, ServerSelectionTimeoutError
+from rest_framework import generics, status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .llm_service import answer_question_with_context
+from .query_parser import parse_query
+from .query_router import route_query, execute_analytics_route, ROUTE_ANALYTICS, ROUTE_RETRIEVAL, ROUTE_RAG
 from .retrieval import retrieve_transactions_for_query
-from .services import ingest_csv
-from .utils import get_db
+from .serializers import (
+    AskQuestionRequestSerializer,
+    RegisterRequestSerializer,
+    RetrieveRequestSerializer,
+)
+from .analytics_service import (
+    get_monthly_summary,
+    get_category_breakdown,
+    get_top_merchants,
+    get_cashflow,
+    detect_subscriptions,
+    detect_unusual_spending,
+)
+
+MONGO_CONNECTION_ERRORS = (
+    ServerSelectionTimeoutError,
+    ConnectionFailure,
+    NetworkTimeout,
+    AutoReconnect,
+)
 
 
-SAMPLE_CSV_PATH = Path(settings.BASE_DIR).parent / "data" / "sample_transactions.csv"
+def _is_mongo_unavailable(exc: Exception) -> bool:
+    if isinstance(exc, MONGO_CONNECTION_ERRORS):
+        return True
+    return isinstance(exc, RuntimeError) and "Could not connect to MongoDB" in str(exc)
 
 
-def _parse_json_body(request):
-    try:
-        return json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON body")
+def _get_user_id(request) -> str | None:
+    """Return a string user_id from the authenticated request, or None."""
+    if request.user and request.user.is_authenticated:
+        return str(request.user.id)
+    return None
 
 
-@require_GET
-def health(request):
-    return JsonResponse({"status": "ok"})
+# ---------------------------------------------------------------------------
+# Auth views
+# ---------------------------------------------------------------------------
 
+class RegisterView(generics.GenericAPIView):
+    serializer_class = RegisterRequestSerializer
+    permission_classes = [AllowAny]
 
-@require_GET
-def ingest_sample_transactions(request):
-    if not SAMPLE_CSV_PATH.exists():
-        return JsonResponse(
-            {"error": f"Sample CSV not found at: {SAMPLE_CSV_PATH}"},
-            status=404,
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            first_error = next(iter(serializer.errors.values()))
+            message = first_error[0] if isinstance(first_error, list) and first_error else first_error
+            return Response({"error": str(message)}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        user = User.objects.create_user(
+            username=data["username"],
+            email=data.get("email", ""),
+            password=data["password"],
         )
-
-    try:
-        report = ingest_csv(str(SAMPLE_CSV_PATH), return_report=True)
-        return JsonResponse(
+        return Response(
             {
-                "message": f"{report['inserted_count']} records inserted successfully",
-                "report": report,
-            }
+                "message": "User registered successfully",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                },
+            },
+            status=status.HTTP_201_CREATED,
         )
-    except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
 
 
-@require_GET
-def get_summary(request):
-    db = get_db()
-    collection = db[settings.MONGO_TRANSACTIONS_COLLECTION]
+class LoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
 
-    by_type = list(
-        collection.aggregate(
-            [
-                {"$group": {"_id": "$transaction_type", "total": {"$sum": "$amount"}}},
-                {"$sort": {"_id": 1}},
-            ]
+
+class LogoutView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        return Response(
+            {"message": "Logged out successfully. Remove access and refresh tokens on client."},
+            status=status.HTTP_200_OK,
         )
-    )
-    by_category = list(
-        collection.aggregate(
-            [
-                {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}},
-                {"$sort": {"_id": 1}},
-            ]
-        )
-    )
-
-    return JsonResponse({"summary_by_type": by_type, "summary_by_category": by_category})
 
 
-@csrf_exempt
-@require_POST
-def retrieve_transactions(request):
-    try:
-        payload = _parse_json_body(request)
-        question = str(payload.get("question") or "").strip()
-        top_k = int(payload.get("k") or settings.RAG_TOP_K)
-        if top_k <= 0:
-            raise ValueError("k must be greater than 0")
+class StatusView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
 
-        results = retrieve_transactions_for_query(question=question, top_k=top_k)
-        return JsonResponse(
-            {
+    def get(self, request):
+        from .qdrant_service import is_available as qdrant_ok
+        return Response({
+            "status": "ok",
+            "qdrant": "connected" if qdrant_ok() else "unavailable",
+        })
+
+
+# ---------------------------------------------------------------------------
+# Retrieval view
+# ---------------------------------------------------------------------------
+
+class RetrieveTransactionsView(generics.GenericAPIView):
+    serializer_class = RetrieveRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def _handle(self, data, request):
+        serializer = self.get_serializer(data=data)
+        if not serializer.is_valid():
+            first_error = next(iter(serializer.errors.values()))
+            message = first_error[0] if isinstance(first_error, list) and first_error else first_error
+            return Response({"error": str(message)}, status=status.HTTP_400_BAD_REQUEST)
+
+        question = serializer.validated_data["question"]
+        top_k = serializer.validated_data["k"]
+        user_id = _get_user_id(request)
+
+        try:
+            parsed = parse_query(question)
+            results = retrieve_transactions_for_query(
+                question=question,
+                top_k=top_k,
+                parsed=parsed,
+                user_id=user_id,
+            )
+            return Response(
+                {
+                    "question": question,
+                    "parsed_intent": parsed.intent,
+                    "top_k": top_k,
+                    "count": len(results),
+                    "results": results,
+                }
+            )
+        except Exception as exc:
+            if _is_mongo_unavailable(exc):
+                return Response(
+                    {"error": "Database unavailable. Please try again later."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        return self._handle(request.data, request)
+
+    def get(self, request):
+        return self._handle(request.query_params, request)
+
+
+# ---------------------------------------------------------------------------
+# Ask view — query router + analytics + RAG
+# ---------------------------------------------------------------------------
+
+class AskQuestionView(generics.GenericAPIView):
+    serializer_class = AskQuestionRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def _handle(self, data, request):
+        serializer = self.get_serializer(data=data)
+        if not serializer.is_valid():
+            first_error = next(iter(serializer.errors.values()))
+            message = first_error[0] if isinstance(first_error, list) and first_error else first_error
+            return Response({"error": str(message)}, status=status.HTTP_400_BAD_REQUEST)
+
+        question = serializer.validated_data["question"]
+        top_k = serializer.validated_data["k"]
+        user_id = _get_user_id(request)
+
+        try:
+            parsed = parse_query(question)
+            route = route_query(parsed)
+
+            # --- Analytics route: deterministic, no LLM ---
+            if route == ROUTE_ANALYTICS:
+                analytics_result = execute_analytics_route(parsed, user_id)
+                return Response({
+                    "question": question,
+                    "route": route,
+                    "intent": parsed.intent,
+                    "answer": analytics_result.get("summary") or "Analytics computed successfully.",
+                    "data": analytics_result.get("data"),
+                    "provider": "analytics_engine",
+                    "provider_errors": [],
+                    "sources": [],
+                    "source_count": 0,
+                    "confidence": 1.0,
+                })
+
+            # --- Retrieval-only route ---
+            if route == ROUTE_RETRIEVAL:
+                transactions = retrieve_transactions_for_query(
+                    question=question, top_k=top_k, parsed=parsed, user_id=user_id
+                )
+                return Response({
+                    "question": question,
+                    "route": route,
+                    "intent": parsed.intent,
+                    "answer": None,
+                    "data": None,
+                    "provider": "retrieval_engine",
+                    "provider_errors": [],
+                    "sources": transactions,
+                    "source_count": len(transactions),
+                    "confidence": None,
+                })
+
+            # --- RAG route: retrieval + LLM explanation ---
+            transactions = retrieve_transactions_for_query(
+                question=question, top_k=top_k, parsed=parsed, user_id=user_id
+            )
+            llm_result = answer_question_with_context(question=question, transactions=transactions)
+
+            return Response({
                 "question": question,
-                "top_k": top_k,
-                "count": len(results),
-                "results": results,
-            }
-        )
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
-
-
-@csrf_exempt
-@require_POST
-def ask_question(request):
-    try:
-        payload = _parse_json_body(request)
-        question = str(payload.get("question") or "").strip()
-        top_k = int(payload.get("k") or settings.RAG_TOP_K)
-        if not question:
-            raise ValueError("question is required")
-        if top_k <= 0:
-            raise ValueError("k must be greater than 0")
-
-        transactions = retrieve_transactions_for_query(question=question, top_k=top_k)
-        llm_result = answer_question_with_context(question=question, transactions=transactions)
-
-        return JsonResponse(
-            {
-                "question": question,
-                "top_k": top_k,
+                "route": route,
+                "intent": parsed.intent,
                 "answer": llm_result.get("answer"),
-                "provider_used": llm_result.get("provider_used"),
-                "model_used": llm_result.get("model_used"),
-                "fallback_count": llm_result.get("fallback_count"),
+                "data": None,
+                "provider": llm_result.get("provider"),
                 "provider_errors": llm_result.get("provider_errors", []),
                 "sources": transactions,
                 "source_count": len(transactions),
-            }
-        )
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
+                "confidence": _compute_confidence(transactions),
+            })
+
+        except Exception as exc:
+            if _is_mongo_unavailable(exc):
+                return Response(
+                    {"error": "Database unavailable. Please try again later."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def post(self, request):
+        return self._handle(request.data, request)
+
+    def get(self, request):
+        return self._handle(request.query_params, request)
+
+
+def _compute_confidence(transactions: list) -> float:
+    """Simple confidence score based on source count and scores."""
+    if not transactions:
+        return 0.0
+    scores = [t.get("final_score", 0.5) for t in transactions]
+    avg = sum(scores) / len(scores)
+    return round(min(avg, 1.0), 2)
+
+
+# ---------------------------------------------------------------------------
+# Analytics endpoints
+# ---------------------------------------------------------------------------
+
+class MonthlySummaryView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        year = request.query_params.get("year")
+        try:
+            year = int(year) if year else None
+            data = get_monthly_summary(user_id=user_id, year=year)
+            return Response({"monthly_summary": data})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CategoryBreakdownView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import date as date_type
+        user_id = _get_user_id(request)
+        try:
+            data = get_category_breakdown(user_id=user_id)
+            return Response({"category_breakdown": data})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TopMerchantsView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        limit = int(request.query_params.get("limit", 10))
+        try:
+            data = get_top_merchants(user_id=user_id, limit=limit)
+            return Response({"top_merchants": data})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CashflowView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        try:
+            data = get_cashflow(user_id=user_id)
+            return Response({"cashflow": data})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SubscriptionsView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        try:
+            data = detect_subscriptions(user_id=user_id)
+            return Response({"subscriptions": data, "count": len(data)})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AnomaliesView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        try:
+            data = detect_unusual_spending(user_id=user_id)
+            return Response({"anomalies": data, "count": len(data)})
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

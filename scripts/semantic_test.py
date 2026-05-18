@@ -83,7 +83,13 @@ def main():
     args = parser.parse_args()
 
     bootstrap_django()
-    results = semantic_search(query=args.query, top_k=args.top_k)
+    try:
+        results = semantic_search(query=args.query, top_k=args.top_k)
+    except Exception as exc:
+        print("Semantic test failed to connect/query MongoDB.")
+        print(f"Error: {exc}")
+        print("Check backend/.env: MONGO_URI, Atlas IP allowlist, and optional MONGO_URI_FALLBACK.")
+        raise SystemExit(1)
 
     print(f"Query: {args.query}")
     print(f"Top {len(results)} results:")
