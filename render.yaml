@@ -1,15 +1,16 @@
 services:
   # ---------------------------------------------------------------------------
-  # Backend — Django REST API
+  # Backend — pulls Docker image from DockerHub
+  # Image is built and pushed by GitHub Actions on every push to main
   # ---------------------------------------------------------------------------
   - type: web
     name: finagent-server
-    runtime: python
-    rootDir: backend
-    buildCommand: "./build.sh"
-    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    image:
+      url: docker.io/tanya391/finagent-server:latest
     healthCheckPath: /api/v1/status/
     envVars:
+      - key: PORT
+        value: 8000
       - key: DEBUG
         value: false
       - key: SECRET_KEY
@@ -17,7 +18,7 @@ services:
       - key: ALLOWED_HOSTS
         value: finagent-server.onrender.com
       - key: MONGO_URI
-        sync: false          # set manually in Render dashboard — contains credentials
+        sync: false
       - key: DB_NAME
         value: finagent_ai
       - key: MONGO_TRANSACTIONS_COLLECTION
@@ -33,7 +34,7 @@ services:
       - key: RAG_TOP_K
         value: 8
       - key: QDRANT_URL
-        sync: false          # set manually if using Qdrant Cloud, leave blank to skip
+        sync: false
       - key: QDRANT_API_KEY
         sync: false
       - key: QDRANT_COLLECTION
@@ -45,7 +46,7 @@ services:
       - key: LLM_TIMEOUT_SEC
         value: 12
       - key: GROQ_API_KEY
-        sync: false          # set manually in Render dashboard
+        sync: false
       - key: GROQ_MODEL
         value: llama-3.1-8b-instant
       - key: HF_API_KEY
@@ -54,26 +55,14 @@ services:
         value: meta-llama/Llama-3.1-8B-Instruct
       - key: HF_BASE_URL
         value: https://router.huggingface.co/v1/chat/completions
-      - key: PYTHON_VERSION
-        value: 3.11.0
 
   # ---------------------------------------------------------------------------
-  # Frontend — React/Vite Static Site
+  # Frontend — pulls Docker image from DockerHub
   # ---------------------------------------------------------------------------
   - type: web
     name: finagent-ui
-    runtime: static
-    rootDir: frontend
-    buildCommand: "npm install && npm run build"
-    staticPublishPath: dist
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    image:
+      url: docker.io/tanya391/finagent-ui:latest
     envVars:
-      - key: VITE_API_BASE_URL
-        value: https://finagent-server.onrender.com/api/v1
+      - key: PORT
+        value: 80
