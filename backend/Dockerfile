@@ -19,7 +19,7 @@ RUN pip install --upgrade pip --no-cache-dir \
 COPY . .
 
 # collectstatic — use simple storage to avoid manifest hashing issues at build time
-RUN SECRET_KEY=build-time-placeholder \
+RUN SECRET_KEY=build-time-placeholder-key-for-collectstatic-only-not-used-in-prod \
     DEBUG=false \
     DJANGO_SETTINGS_MODULE=config.settings \
     STATICFILES_STORAGE=django.contrib.staticfiles.storage.StaticFilesStorage \
