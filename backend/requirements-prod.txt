@@ -1,0 +1,19 @@
+# Production requirements — excludes sentence-transformers and torch
+# Vector search uses Qdrant Cloud (if configured) or falls back to regex/metadata search
+# This keeps the Docker image under 200MB
+
+Django>=5.0,<6.0
+djangorestframework>=3.15,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+pymongo>=4.6,<5.0
+python-dotenv>=1.0,<2.0
+pydantic>=2.7,<3.0
+certifi>=2024.2.2
+requests>=2.31.0
+dateparser>=1.2.0,<2.0
+gunicorn>=21.2.0,<22.0
+whitenoise>=6.6.0,<7.0
+django-cors-headers>=4.3.0,<5.0
+
+# sentence-transformers and qdrant-client intentionally excluded from production
+# Retrieval falls back to MongoDB regex + metadata search which works without embeddings

@@ -1,37 +1,28 @@
-# ── Stage 1: builder ──────────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+# Lightweight production image ~150-200MB
+# sentence-transformers/torch excluded — retrieval uses regex+metadata fallback
+# Vector search requires Qdrant Cloud + pre-ingested embeddings (optional feature)
 
-WORKDIR /app
-
-# System deps needed to compile some Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --prefix=/install --no-cache-dir -r requirements.txt
-
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /install /usr/local
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application code
+# Use production requirements (no torch/sentence-transformers)
+COPY requirements-prod.txt .
+RUN pip install --upgrade pip --no-cache-dir \
+    && pip install --no-cache-dir -r requirements-prod.txt \
+    && find /usr/local/lib/python3.11 -name "*.pyc" -delete 2>/dev/null || true \
+    && find /usr/local/lib/python3.11 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
 COPY . .
 
-# Collect static files at build time
-# SECRET_KEY is only needed for collectstatic — not a real secret here
-RUN SECRET_KEY=build-time-placeholder-not-used-in-prod \
-    DEBUG=false \
+RUN SECRET_KEY=build-time-placeholder DEBUG=false \
     python manage.py collectstatic --noinput
 
-# Run migrations + start gunicorn
-# Migrations run at container start so the SQLite auth DB is always up to date
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120"]
 
 EXPOSE 8000
