@@ -1,6 +1,5 @@
 # Lightweight production image ~150-200MB
 # sentence-transformers/torch excluded — retrieval uses regex+metadata fallback
-# Vector search requires Qdrant Cloud + pre-ingested embeddings (optional feature)
 
 FROM python:3.11-slim
 
@@ -11,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Use production requirements (no torch/sentence-transformers)
 COPY requirements-prod.txt .
 RUN pip install --upgrade pip --no-cache-dir \
     && pip install --no-cache-dir -r requirements-prod.txt \
@@ -20,7 +18,11 @@ RUN pip install --upgrade pip --no-cache-dir \
 
 COPY . .
 
-RUN SECRET_KEY=build-time-placeholder DEBUG=false \
+# collectstatic — use simple storage to avoid manifest hashing issues at build time
+RUN SECRET_KEY=build-time-placeholder \
+    DEBUG=false \
+    DJANGO_SETTINGS_MODULE=config.settings \
+    STATICFILES_STORAGE=django.contrib.staticfiles.storage.StaticFilesStorage \
     python manage.py collectstatic --noinput
 
 CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120"]
