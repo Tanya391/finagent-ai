@@ -6,11 +6,4 @@ class TransactionsConfig(AppConfig):
     name = 'transactions'
 
     def ready(self):
-        # Pre-load the embedding model at startup only if available
-        # In production (Docker), sentence-transformers may not be installed
-        try:
-            from embeddings.embedding_service import _is_available, _get_model
-            if _is_available():
-                _get_model()
-        except Exception:
-            pass
+        pass

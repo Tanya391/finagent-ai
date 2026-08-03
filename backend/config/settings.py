@@ -52,31 +52,16 @@ MONGO_SERVER_SELECTION_TIMEOUT_MS = int(os.getenv("MONGO_SERVER_SELECTION_TIMEOU
 MONGO_CONNECT_TIMEOUT_MS = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "20000"))
 MONGO_SOCKET_TIMEOUT_MS = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000"))
 
+
 # ---------------------------------------------------------------------------
-# Embeddings + Qdrant
+# LLM & Retrieval
 # ---------------------------------------------------------------------------
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "8"))
-
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-QDRANT_URL = os.getenv("QDRANT_URL", "").strip()
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "").strip()
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "transactions")
-QDRANT_VECTOR_SIZE = int(os.getenv("QDRANT_VECTOR_SIZE", "384"))
-
-# ---------------------------------------------------------------------------
-# LLM
-# ---------------------------------------------------------------------------
-LLM_FALLBACK_ORDER = _env_csv("LLM_FALLBACK_ORDER", "groq,huggingface")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "12"))
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-HF_API_KEY = os.getenv("HF_API_KEY", "").strip()
-HF_MODEL = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
-HF_BASE_URL = os.getenv("HF_BASE_URL", "https://router.huggingface.co/v1/chat/completions").strip()
+# Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 # ---------------------------------------------------------------------------
 # Installed apps

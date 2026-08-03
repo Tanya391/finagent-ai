@@ -3,6 +3,7 @@ import requests
 from django.conf import settings
 from rest_framework.exceptions import APIException
 from .prompts import build_grounded_prompt
+from google import genai
 
 # ---------------------------------------------------------------------------
 # Simple in-memory response cache
@@ -42,65 +43,25 @@ def _request_json(url: str, payload: dict, headers: dict, timeout_sec: int) -> d
 
 
 # ---------------------------------------------------------------------------
-# Groq
+# Gemini
 # ---------------------------------------------------------------------------
-def _call_groq(prompt: str) -> str:
-    if not settings.GROQ_API_KEY:
-        raise APIException("GROQ_API_KEY is missing")
+def _call_gemini(prompt: str) -> str:
+    if not settings.GEMINI_API_KEY:
+        raise APIException("GEMINI_API_KEY is missing")
 
-    payload = {
-        "model": settings.GROQ_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 512,   # cap output length — faster responses
-    }
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-    }
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     try:
-        body = _request_json(
-            "https://api.groq.com/openai/v1/chat/completions",
-            payload, headers,
-            settings.LLM_TIMEOUT_SEC,
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
         )
-        text = body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        text = response.text.strip()
         if not text:
-            raise APIException("Groq returned empty text")
+            raise APIException("Gemini returned empty text")
         return text
     except Exception as err:
-        raise APIException(f"Groq request failed: {err}") from err
-
-
-# ---------------------------------------------------------------------------
-# Hugging Face
-# ---------------------------------------------------------------------------
-def _call_huggingface(prompt: str) -> str:
-    if not settings.HF_API_KEY:
-        raise APIException("HF_API_KEY is missing")
-
-    payload = {
-        "model": settings.HF_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 512,
-    }
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {settings.HF_API_KEY}",
-    }
-
-    try:
-        body = _request_json(
-            settings.HF_BASE_URL, payload, headers, settings.LLM_TIMEOUT_SEC
-        )
-        text = body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        if not text:
-            raise APIException("Hugging Face returned empty text")
-        return text
-    except Exception as err:
-        raise APIException(f"Hugging Face request failed: {err}") from err
+        raise APIException(f"Gemini request failed: {err}") from err
 
 
 # ---------------------------------------------------------------------------
@@ -122,30 +83,14 @@ def answer_question_with_context(question: str, transactions: list[dict]) -> dic
 
     prompt = build_grounded_prompt(question=question, transactions=transactions)
 
-    provider_map = {
-        "groq": _call_groq,
-        "huggingface": _call_huggingface,
-    }
-    order = settings.LLM_FALLBACK_ORDER or ["groq", "huggingface"]
-    errors = []
-
-    for provider in order:
-        key = provider.lower().strip()
-        fn = provider_map.get(key)
-        if not fn:
-            errors.append({"provider": key, "error": "unsupported provider"})
-            continue
-        try:
-            answer_text = fn(prompt)
-            result = {
-                "answer": answer_text,
-                "provider": key,
-                "provider_errors": errors,
-            }
-            _set_cached(cache_key, result)
-            return result
-        except APIException as err:
-            errors.append({"provider": key, "error": str(err)})
-            continue
-
-    raise RuntimeError(f"All LLM providers failed: {errors}")
+    try:
+        answer_text = _call_gemini(prompt)
+        result = {
+            "answer": answer_text,
+            "provider": "gemini",
+            "provider_errors": [],
+        }
+        _set_cached(cache_key, result)
+        return result
+    except APIException as err:
+        raise RuntimeError(f"LLM provider failed: {err}")

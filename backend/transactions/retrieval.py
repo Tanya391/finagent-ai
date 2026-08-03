@@ -1,11 +1,10 @@
 """
 Hybrid Retrieval Engine.
 
-Priority:
-  1. Qdrant vector search (with metadata filters from parsed query)
-  2. MongoDB metadata filter (category / merchant / date / type)
-  3. Regex text search fallback
-  4. Broad fallback — return recent transactions when nothing else matches
+priority:
+  1. MongoDB metadata filter (category / merchant / date / type)
+  2. Regex text search fallback
+  3. Broad fallback — return recent transactions when nothing else matches
 
 user_id handling:
   Documents ingested via shell have no user_id field.
@@ -148,37 +147,30 @@ def _broad_search(collection, user_id: str | None, limit: int) -> list[dict]:
 
 
 def _merge_results(
-    vector_hits: list[dict],
     metadata_hits: list[dict],
     regex_hits: list[dict],
     limit: int,
 ) -> list[dict]:
     """
     Weighted merge and deduplication.
-    final_score = 0.6 * vector + 0.3 * metadata + 0.1 * regex
+    final_score = 0.8 * metadata + 0.2 * regex
     """
     scores: dict[str, dict] = {}
-
-    for hit in vector_hits:
-        tid = hit.get("transaction_id")
-        if not tid:
-            continue
-        scores[tid] = {**hit, "final_score": round(0.6 * hit.get("vector_score", 0), 4)}
 
     for hit in metadata_hits:
         tid = hit.get("transaction_id")
         if not tid:
             continue
         if tid in scores:
-            scores[tid]["final_score"] = round(scores[tid]["final_score"] + 0.3, 4)
+            scores[tid]["final_score"] = round(scores[tid]["final_score"] + 0.8, 4)
         else:
-            scores[tid] = {**hit, "final_score": 0.3}
+            scores[tid] = {**hit, "final_score": 0.8}
 
     for hit in regex_hits:
         tid = hit.get("transaction_id")
         if not tid:
             continue
-        bonus = hit.get("regex_score", 0.1) * 0.1
+        bonus = hit.get("regex_score", 0.1) * 0.2
         if tid in scores:
             scores[tid]["final_score"] = round(scores[tid]["final_score"] + bonus, 4)
         else:
@@ -187,7 +179,6 @@ def _merge_results(
     merged = sorted(scores.values(), key=lambda x: x.get("final_score", 0), reverse=True)
 
     for item in merged:
-        item.pop("vector_score", None)
         item.pop("metadata_score", None)
         item.pop("regex_score", None)
 
@@ -203,14 +194,11 @@ def retrieve_transactions_for_query(
     """
     Main retrieval entry point.
 
-    1. Qdrant vector search (skipped if Qdrant unavailable)
-    2. MongoDB metadata filter (category / merchant / date / type)
-    3. Regex text search
-    4. Broad fallback if all above return nothing
-    5. Weighted merge
+    1. MongoDB metadata filter (category / merchant / date / type)
+    2. Regex text search
+    3. Broad fallback if all above return nothing
+    4. Weighted merge
     """
-    from embeddings.embedding_service import generate_embedding
-    from .qdrant_service import search_vectors, is_available as qdrant_available
 
     clean_question = (question or "").strip()
     if not clean_question:
@@ -220,37 +208,10 @@ def retrieve_transactions_for_query(
     db = get_db()
     collection = db[settings.MONGO_TRANSACTIONS_COLLECTION]
 
-    vector_hits:   list[dict] = []
     metadata_hits: list[dict] = []
     regex_hits:    list[dict] = []
 
-    # 1. Qdrant
-    try:
-        if qdrant_available():
-            query_vector = generate_embedding(clean_question)
-            qdrant_results = search_vectors(
-                query_vector=query_vector,
-                top_k=limit,
-                user_id=user_id,
-                category=parsed.category if parsed else None,
-                normalized_merchant=parsed.merchant if parsed else None,
-                transaction_type=parsed.transaction_type if parsed else None,
-                date_from=parsed.date_from if parsed else None,
-                date_to=parsed.date_to if parsed else None,
-            )
-            if qdrant_results:
-                ids = [r["transaction_id"] for r in qdrant_results if r.get("transaction_id")]
-                full_docs = _fetch_by_ids(collection, ids)
-                for r in qdrant_results:
-                    tid = r.get("transaction_id")
-                    if tid and tid in full_docs:
-                        doc = full_docs[tid]
-                        doc["vector_score"] = r.get("vector_score", 0)
-                        vector_hits.append(doc)
-    except Exception as exc:
-        logger.warning("Qdrant retrieval failed, continuing with fallbacks: %s", exc)
-
-    # 2. Metadata filter
+    # 1. Metadata filter
     try:
         if parsed:
             metadata_hits = _metadata_search(collection, parsed, user_id, limit)
@@ -263,10 +224,10 @@ def retrieve_transactions_for_query(
     except Exception as exc:
         logger.warning("Regex search failed: %s", exc)
 
-    # 4. Merge
-    merged = _merge_results(vector_hits, metadata_hits, regex_hits, limit)
+    # 3. Merge
+    merged = _merge_results(metadata_hits, regex_hits, limit)
 
-    # 5. Broad fallback — if still nothing, return recent transactions
+    # 4. Broad fallback — if still nothing, return recent transactions
     if not merged:
         try:
             merged = _broad_search(collection, user_id, limit)

@@ -301,68 +301,6 @@ def detect_subscriptions(
     return subscriptions
 
 
-# ---------------------------------------------------------------------------
-# Anomaly detection (z-score based)
-# ---------------------------------------------------------------------------
-def detect_unusual_spending(
-    user_id: str | None = None,
-    z_threshold: float = 2.0,
-) -> list[dict[str, Any]]:
-    """
-    Detect transactions with unusually high amounts using z-score.
-    A transaction is flagged if its amount is more than z_threshold
-    standard deviations above the mean for its category.
-    """
-    col = _collection()
-    f: dict = {"transaction_type": "debit"}
-    if user_id:
-        f["$or"] = [{"user_id": user_id}, {"user_id": {"$exists": False}}]
-
-    # Get all debit transactions
-    transactions = list(col.find(f, {"_id": 0, "transaction_id": 1, "amount": 1,
-                                     "category": 1, "receiver": 1, "date": 1,
-                                     "normalized_merchant": 1}))
-
-    if not transactions:
-        return []
-
-    # Group amounts by category
-    category_amounts: dict[str, list[float]] = defaultdict(list)
-    for tx in transactions:
-        category_amounts[tx.get("category", "other")].append(tx["amount"])
-
-    # Compute stats per category
-    category_stats: dict[str, dict] = {}
-    for cat, amounts in category_amounts.items():
-        if len(amounts) >= 3:
-            mean = statistics.mean(amounts)
-            try:
-                std = statistics.stdev(amounts)
-            except statistics.StatisticsError:
-                std = 0
-            category_stats[cat] = {"mean": mean, "std": std}
-
-    anomalies = []
-    for tx in transactions:
-        cat = tx.get("category", "other")
-        stats = category_stats.get(cat)
-        if not stats or stats["std"] == 0:
-            continue
-        z_score = (tx["amount"] - stats["mean"]) / stats["std"]
-        if z_score > z_threshold:
-            anomalies.append({
-                "transaction_id": tx["transaction_id"],
-                "date": tx["date"],
-                "receiver": tx.get("receiver"),
-                "normalized_merchant": tx.get("normalized_merchant"),
-                "category": cat,
-                "amount": tx["amount"],
-                "z_score": round(z_score, 2),
-                "category_mean": round(stats["mean"], 2),
-            })
-
-    return sorted(anomalies, key=lambda x: x["z_score"], reverse=True)
-
 
 # ---------------------------------------------------------------------------
 # Compare two periods

@@ -24,8 +24,11 @@ from .analytics_service import (
     get_top_merchants,
     get_cashflow,
     detect_subscriptions,
-    detect_unusual_spending,
 )
+from .services import generate_demo_data, ingest_csv
+import os
+import tempfile
+from rest_framework.parsers import MultiPartParser, FormParser
 
 MONGO_CONNECTION_ERRORS = (
     ServerSelectionTimeoutError,
@@ -100,10 +103,8 @@ class StatusView(generics.GenericAPIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .qdrant_service import is_available as qdrant_ok
         return Response({
             "status": "ok",
-            "qdrant": "connected" if qdrant_ok() else "unavailable",
         })
 
 
@@ -221,7 +222,7 @@ class AskQuestionView(generics.GenericAPIView):
             )
             llm_result = answer_question_with_context(question=question, transactions=transactions)
 
-            return Response({
+            response_data = {
                 "question": question,
                 "route": route,
                 "intent": parsed.intent,
@@ -232,7 +233,24 @@ class AskQuestionView(generics.GenericAPIView):
                 "sources": transactions,
                 "source_count": len(transactions),
                 "confidence": _compute_confidence(transactions),
-            })
+            }
+            
+            # Save to query history
+            from .utils import get_db
+            from datetime import datetime
+            if user_id:
+                try:
+                    db = get_db()
+                    db.query_history.insert_one({
+                        "user_id": user_id,
+                        "question": question,
+                        "route": route,
+                        "timestamp": datetime.utcnow()
+                    })
+                except Exception:
+                    pass
+
+            return Response(response_data)
 
         except Exception as exc:
             if _is_mongo_unavailable(exc):
@@ -247,6 +265,26 @@ class AskQuestionView(generics.GenericAPIView):
 
     def get(self, request):
         return self._handle(request.query_params, request)
+
+class QueryHistoryView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        if not user_id:
+            return Response({"error": "Unauthorized"}, status=401)
+        
+        try:
+            from .utils import get_db
+            db = get_db()
+            history = list(db.query_history.find(
+                {"user_id": user_id},
+                {"_id": 0}
+            ).sort("timestamp", -1).limit(50))
+            
+            return Response({"history": history}, status=200)
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=500)
 
 
 def _compute_confidence(transactions: list) -> float:
@@ -325,14 +363,61 @@ class SubscriptionsView(generics.GenericAPIView):
         except Exception as exc:
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class AnomaliesView(generics.GenericAPIView):
+class SeedDemoDataView(generics.GenericAPIView):
+    """
+    POST /api/v1/seed/
+    Generates 6 months of realistic dummy transaction data for the logged-in user.
+    """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def post(self, request):
         user_id = _get_user_id(request)
+        if not user_id:
+            return Response({"error": "User ID required"}, status=status.HTTP_401_UNAUTHORIZED)
+        
         try:
-            data = detect_unusual_spending(user_id=user_id)
-            return Response({"anomalies": data, "count": len(data)})
+            # We can optionally read 'months' from request data if we want to allow flexibility
+            months = int(request.data.get("months", 6))
+            count = generate_demo_data(str(user_id), months=months)
+            return Response({
+                "message": f"Successfully generated {count} transactions.",
+                "count": count
+            }, status=status.HTTP_201_CREATED)
         except Exception as exc:
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class UploadTransactionsView(generics.GenericAPIView):
+    """
+    POST /api/v1/upload/
+    Uploads a CSV file of transactions and associates them with the logged-in user.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs):
+        user_id = _get_user_id(request)
+        file_obj = request.FILES.get('file')
+
+        if not file_obj:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not file_obj.name.endswith('.csv'):
+            return Response({"error": "Only CSV files are supported"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Save temporarily
+        fd, temp_path = tempfile.mkstemp(suffix=".csv")
+        try:
+            with os.fdopen(fd, 'wb') as temp_file:
+                for chunk in file_obj.chunks():
+                    temp_file.write(chunk)
+            
+            # Ingest
+            report = ingest_csv(temp_path, return_report=True, user_id=str(user_id))
+            return Response(report, status=status.HTTP_200_OK)
+        
+        except Exception as exc:
+            return Response({"error": f"Failed to process file: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+

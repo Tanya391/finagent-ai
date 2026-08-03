@@ -33,6 +33,14 @@ from .categorizer import CATEGORY_PATTERNS
 # Intent patterns
 # ---------------------------------------------------------------------------
 INTENT_PATTERNS: list[tuple[str, list[re.Pattern]]] = [
+    ("explain", [
+        re.compile(r"\bwhy\b", re.IGNORECASE),
+        re.compile(r"\bexplain\b", re.IGNORECASE),
+        re.compile(r"\bwhat\s+is\b", re.IGNORECASE),
+        re.compile(r"\btell\s+me\s+about\b", re.IGNORECASE),
+        re.compile(r"\bpattern", re.IGNORECASE),
+        re.compile(r"\bhow\s+can\s+i\b", re.IGNORECASE),
+    ]),
     ("sum_expenses", [
         re.compile(r"\bhow\s+much\b.*\bspend\b", re.IGNORECASE),
         re.compile(r"\btotal\b.*\bspend\b", re.IGNORECASE),
@@ -74,19 +82,6 @@ INTENT_PATTERNS: list[tuple[str, list[re.Pattern]]] = [
         re.compile(r"\bsubscription\b", re.IGNORECASE),
         re.compile(r"\brecurring\b", re.IGNORECASE),
         re.compile(r"\bmonthly\s+charge\b", re.IGNORECASE),
-    ]),
-    ("anomaly_check", [
-        re.compile(r"\bunusual\b", re.IGNORECASE),
-        re.compile(r"\banomaly\b", re.IGNORECASE),
-        re.compile(r"\bspike\b", re.IGNORECASE),
-        re.compile(r"\babnormal\b", re.IGNORECASE),
-        re.compile(r"\bsuspicious\b", re.IGNORECASE),
-    ]),
-    ("explain", [
-        re.compile(r"\bwhy\b", re.IGNORECASE),
-        re.compile(r"\bexplain\b", re.IGNORECASE),
-        re.compile(r"\bwhat\s+is\b", re.IGNORECASE),
-        re.compile(r"\btell\s+me\s+about\b", re.IGNORECASE),
     ]),
 ]
 

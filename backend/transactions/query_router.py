@@ -8,7 +8,6 @@ Routing table:
   compare_periods    → analytics (compare_months)
   cashflow           → analytics (get_cashflow)
   subscription_check → analytics (detect_subscriptions)
-  anomaly_check      → analytics (detect_unusual_spending)
   explain            → retrieval + LLM
   semantic_search    → hybrid retrieval + LLM
 """
@@ -35,7 +34,6 @@ INTENT_ROUTE_MAP: dict[str, str] = {
     "compare_periods": ROUTE_ANALYTICS,
     "cashflow": ROUTE_ANALYTICS,
     "subscription_check": ROUTE_ANALYTICS,
-    "anomaly_check": ROUTE_ANALYTICS,
     "list_transactions": ROUTE_RETRIEVAL,
     "explain": ROUTE_RAG,
     "semantic_search": ROUTE_RAG,
@@ -61,7 +59,6 @@ def execute_analytics_route(parsed: ParsedQuery, user_id: str | None) -> dict[st
         get_monthly_summary,
         get_cashflow,
         detect_subscriptions,
-        detect_unusual_spending,
         compare_months,
         category_trend_analysis,
     )
@@ -155,11 +152,6 @@ def execute_analytics_route(parsed: ParsedQuery, user_id: str | None) -> dict[st
     if intent == "subscription_check":
         result = detect_subscriptions(user_id=user_id)
         summary = f"{len(result)} recurring subscription{'' if len(result) == 1 else 's'} detected." if result else "No recurring subscriptions detected."
-        return {"route": ROUTE_ANALYTICS, "intent": intent, "data": result, "summary": summary}
-
-    if intent == "anomaly_check":
-        result = detect_unusual_spending(user_id=user_id)
-        summary = f"{len(result)} unusual transaction{'' if len(result) == 1 else 's'} detected." if result else "No unusual spending detected."
         return {"route": ROUTE_ANALYTICS, "intent": intent, "data": result, "summary": summary}
 
     # Fallback

@@ -1,5 +1,4 @@
 # Lightweight production image ~150-200MB
-# sentence-transformers/torch excluded — retrieval uses regex+metadata fallback
 
 FROM python:3.11-slim
 
@@ -25,6 +24,6 @@ RUN SECRET_KEY=build-time-placeholder-key-for-collectstatic-only-not-used-in-pro
     STATICFILES_STORAGE=django.contrib.staticfiles.storage.StaticFilesStorage \
     python manage.py collectstatic --noinput
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 120"]
 
 EXPOSE 8000
