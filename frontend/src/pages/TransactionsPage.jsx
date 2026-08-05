@@ -1,212 +1,170 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { aiService } from '../services/api';
+import React, { useState } from 'react';
+import { Search, Filter, Receipt, ArrowUpRight, ArrowDownLeft, Sparkles, RefreshCw } from 'lucide-react';
+import { useTransactions } from '../hooks/useAnalytics';
+import { Skeleton } from '../components/ui/Skeleton';
+import { ErrorState } from '../components/ui/ErrorState';
 
-const TYPE_PILL = {
-  debit:  'bg-red-500/10 text-red-500 dark:text-red-400',
-  credit: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-};
+export function TransactionsPage() {
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
 
-function TransactionRow({ tx, expanded, onToggle }) {
+  const { data, isLoading, isError, refetch } = useTransactions({ search, category });
+
+  const transactions = data?.results || data?.transactions || [];
+  const totalCount = data?.count || transactions.length;
+
+  const categories = [
+    { label: 'All Categories', value: '' },
+    { label: 'Subscriptions', value: 'subscriptions' },
+    { label: 'Shopping', value: 'shopping' },
+    { label: 'Food Delivery', value: 'food_delivery' },
+    { label: 'Groceries', value: 'groceries' },
+    { label: 'Travel', value: 'travel' },
+    { label: 'Internet / Recharges', value: 'internet' },
+    { label: 'Rent', value: 'rent' },
+    { label: 'Salary / Income', value: 'salary' },
+  ];
+
   return (
-    <motion.div
-      layout
-      className="bg-white dark:bg-[#13131f] rounded-xl border border-slate-200 dark:border-[#1e1e30] overflow-hidden"
-    >
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-50 dark:hover:bg-[#1a1a2e] transition-colors"
-      >
-        {/* Amount */}
-        <div className="shrink-0 w-28 text-right">
-          <p className={`text-sm font-bold ${tx.transaction_type === 'credit' ? 'text-emerald-500' : 'text-red-400'}`}>
-            {tx.transaction_type === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">Transaction Ledger</h2>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+            Search and filter transactions.
           </p>
         </div>
-
-        {/* Merchant */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white truncate capitalize">
-            {(tx.normalized_merchant || tx.receiver || '').replace(/_/g, ' ')}
-          </p>
-          <p className="text-xs text-slate-400 truncate">{tx.description}</p>
-        </div>
-
-        {/* Date */}
-        <p className="text-xs text-slate-400 shrink-0 hidden sm:block font-mono">{tx.date}</p>
-
-        {/* Type pill */}
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase shrink-0 ${TYPE_PILL[tx.transaction_type] || ''}`}>
-          {tx.transaction_type}
-        </span>
-
-        {/* Chevron */}
-        <svg
-          className={`w-4 h-4 text-slate-300 dark:text-slate-600 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+            Total Records: <strong className="text-indigo-600 dark:text-indigo-400 font-mono-num">{totalCount}</strong>
+          </span>
+          <button
+            onClick={() => refetch()}
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition"
+            title="Refresh Transactions"
           >
-            <div className="px-4 pb-4 pt-3 border-t border-slate-100 dark:border-[#1e1e30] grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                ['Category',  tx.category?.replace(/_/g, ' ')],
-                ['Merchant',  tx.normalized_merchant?.replace(/_/g, ' ')],
-                ['Date',      tx.date],
-                ['Score',     tx.final_score?.toFixed(3) ?? '—'],
-              ].map(([label, val]) => (
-                <div key={label}>
-                  <p className="text-[10px] text-slate-400 uppercase font-semibold mb-0.5 tracking-wide">{label}</p>
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 capitalize">{val || '—'}</p>
-                </div>
-              ))}
-              <div className="col-span-2 sm:col-span-4">
-                <p className="text-[10px] text-slate-400 uppercase font-semibold mb-0.5 tracking-wide">Transaction ID</p>
-                <p className="text-[10px] font-mono text-slate-400 break-all">{tx.transaction_id}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-const QUICK_FILTERS = ['groceries', 'food delivery', 'subscriptions', 'travel', 'salary', 'amazon'];
-
-export default function TransactionsPage() {
-  const [query, setQuery] = useState('');
-  const [topK, setTopK] = useState(20);
-  const [results, setResults] = useState([]);
-  const [meta, setMeta] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
-  const [hasSearched, setHasSearched] = useState(false);
-
-  const handleSearch = async (e) => {
-    e?.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    setError('');
-    setHasSearched(true);
-    try {
-      const data = await aiService.retrieve(query, topK);
-      setResults(Array.isArray(data?.results) ? data.results : []);
-      setMeta({ intent: data?.parsed_intent, count: data?.count });
-    } catch (err) {
-      setError(err.message || 'Retrieval failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
-
-  return (
-    <div className="space-y-5">
-      {/* Search panel */}
-      <div className="bg-white dark:bg-[#13131f] rounded-2xl border border-slate-200 dark:border-[#1e1e30] p-5">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Semantic Transaction Search</h2>
-        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder='e.g. "food spending", "amazon purchases", "travel last month"'
-            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#1a1a2e] border border-slate-200 dark:border-[#1e1e30] text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all"
-          />
-          <div className="flex gap-2 shrink-0">
-            <select
-              value={topK}
-              onChange={(e) => setTopK(Number(e.target.value))}
-              className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#1a1a2e] border border-slate-200 dark:border-[#1e1e30] text-slate-700 dark:text-slate-300 text-sm focus:outline-none"
-            >
-              {[10, 20, 50].map((n) => <option key={n} value={n}>Top {n}</option>)}
-            </select>
-            <button
-              type="submit"
-              disabled={loading || !query.trim()}
-              className="px-5 py-2.5 gradient-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 glow-violet"
-            >
-              {loading ? 'Searching...' : 'Search'}
-            </button>
-          </div>
-        </form>
-
-        {/* Quick filters */}
-        <div className="flex flex-wrap gap-2 mt-3">
-          {QUICK_FILTERS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setQuery(s)}
-              className="text-xs px-3 py-1 rounded-full bg-slate-100 dark:bg-[#1a1a2e] text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300 border border-transparent hover:border-violet-200 dark:hover:border-violet-500/30 transition-all capitalize"
-            >
-              {s}
-            </button>
-          ))}
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/20">
-          <p className="text-sm text-red-400">{error}</p>
+      {/* Filters Bar */}
+      <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
+        {/* Search Input */}
+        <div className="relative w-full md:w-96">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search merchant, description or amount..."
+            className="w-full bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+          />
         </div>
-      )}
 
-      {/* Meta */}
-      {meta && (
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400">Intent:</span>
-          <span className="text-xs font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 px-2 py-0.5 rounded-md">{meta.intent}</span>
-          <span className="text-xs text-slate-400">{meta.count} result{meta.count !== 1 ? 's' : ''}</span>
+        {/* Category Dropdown */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full md:w-56 bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition cursor-pointer"
+          >
+            {categories.map((c) => (
+              <option key={c.value} value={c.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                {c.label}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
 
-      {/* Skeleton */}
-      {loading && (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse bg-slate-100 dark:bg-[#1e1e30] rounded-xl" />
-          ))}
+      {/* Transactions Table */}
+      <div className="glass-card rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800/80 bg-slate-100/70 dark:bg-slate-950/60 text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                <th className="py-3.5 px-6">Merchant / Receiver</th>
+                <th className="py-3.5 px-4">Category</th>
+                <th className="py-3.5 px-4">Date</th>
+                <th className="py-3.5 px-4">Description</th>
+                <th className="py-3.5 px-4 text-center">Type</th>
+                <th className="py-3.5 px-6 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 text-xs">
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="py-4 px-6"><Skeleton className="h-4 w-32" /></td>
+                    <td className="py-4 px-4"><Skeleton className="h-4 w-20" /></td>
+                    <td className="py-4 px-4"><Skeleton className="h-4 w-24" /></td>
+                    <td className="py-4 px-4"><Skeleton className="h-4 w-40" /></td>
+                    <td className="py-4 px-4"><Skeleton className="h-4 w-12 mx-auto" /></td>
+                    <td className="py-4 px-6"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                  </tr>
+                ))
+              ) : isError ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center">
+                    <ErrorState onRetry={refetch} />
+                  </td>
+                </tr>
+              ) : transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Receipt className="w-8 h-8 text-slate-400 dark:text-slate-600" />
+                      <p className="font-semibold text-slate-700 dark:text-slate-400">No matching transactions found</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                transactions.map((t) => (
+                  <tr key={t.transaction_id} className="hover:bg-slate-100/60 dark:hover:bg-slate-900/50 transition">
+                    <td className="py-3.5 px-6 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0">
+                        {t.receiver?.[0] || 'T'}
+                      </div>
+                      <span className="truncate max-w-[180px]">{t.receiver}</span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-indigo-700 dark:text-indigo-300 capitalize">
+                        {(t.category || '').replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 font-mono-num">{t.date}</td>
+                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 truncate max-w-[220px]">{t.description}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          t.transaction_type === 'credit'
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {t.transaction_type === 'credit' ? (
+                          <ArrowDownLeft className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <ArrowUpRight className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                        )}
+                        {t.transaction_type}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-6 text-right font-mono-num font-bold">
+                      <span className={t.transaction_type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}>
+                        {t.transaction_type === 'credit' ? '+' : '-'}₹{t.amount?.toLocaleString('en-IN')}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
-
-      {/* Results */}
-      {!loading && results.length > 0 && (
-        <div className="space-y-2">
-          {results.map((tx, idx) => (
-            <TransactionRow
-              key={tx.transaction_id || idx}
-              tx={tx}
-              expanded={expandedId === (tx.transaction_id || idx)}
-              onToggle={() => toggleExpand(tx.transaction_id || idx)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && hasSearched && results.length === 0 && !error && (
-        <div className="text-center py-16">
-          <div className="w-12 h-12 bg-slate-100 dark:bg-[#1e1e30] rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <p className="text-sm text-slate-400">No matching transactions found.</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

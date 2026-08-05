@@ -161,24 +161,24 @@ def generate_demo_data(user_id: str, months: int = 6) -> int:
     transactions = []
 
     merchants = {
-        "Groceries": ["DMart", "BigBasket", "Reliance Fresh", "Nature's Basket"],
-        "Dining": ["Zomato", "Swiggy", "Starbucks", "Dominos", "Local Cafe"],
-        "Shopping": ["Amazon", "Flipkart", "Myntra", "Zara", "H&M"],
-        "Utilities": ["Electricity Board", "Jio", "Airtel", "Water Bill"],
-        "Entertainment": ["Netflix", "Spotify", "PVR Cinemas", "BookMyShow"],
-        "Transport": ["Uber", "Ola", "Indian Railways", "Metro"],
-        "Health": ["Apollo Pharmacy", "Practo", "Local Clinic"],
+        "groceries": ["DMart", "BigBasket", "Reliance Fresh", "Nature's Basket"],
+        "food_delivery": ["Zomato", "Swiggy", "Starbucks", "Dominos", "Local Cafe"],
+        "shopping": ["Amazon", "Flipkart", "Myntra", "Zara", "H&M"],
+        "utilities": ["Electricity Board", "Jio", "Airtel", "Water Bill"],
+        "entertainment": ["Netflix", "Spotify", "PVR Cinemas", "BookMyShow"],
+        "travel": ["Uber", "Ola", "Indian Railways", "Metro"],
+        "medical": ["Apollo Pharmacy", "Practo", "Local Clinic"],
     }
 
     current_date = start_date
     while current_date <= end_date:
         salary_date = datetime(current_date.year, current_date.month, 1)
         if start_date <= salary_date <= end_date:
-            transactions.append(_create_tx(user_id, salary_date, 85000.0, "credit", "Monthly Salary", "TechCorp Inc.", "Income"))
+            transactions.append(_create_tx(user_id, salary_date, 85000.0, "credit", "Monthly Salary", "TechCorp Inc.", "salary"))
         
         rent_date = datetime(current_date.year, current_date.month, 5)
         if start_date <= rent_date <= end_date:
-            transactions.append(_create_tx(user_id, rent_date, 22000.0, "debit", "Monthly Rent", "Landlord", "Housing"))
+            transactions.append(_create_tx(user_id, rent_date, 22000.0, "debit", "Monthly Rent", "Landlord", "rent"))
         
         num_tx = random.randint(20, 40)
         for _ in range(num_tx):
@@ -190,17 +190,17 @@ def generate_demo_data(user_id: str, months: int = 6) -> int:
             cat = random.choice(list(merchants.keys()))
             merchant = random.choice(merchants[cat])
             
-            if cat == "Groceries":
+            if cat == "groceries":
                 amt = random.uniform(500, 3000)
-            elif cat == "Dining":
+            elif cat == "food_delivery":
                 amt = random.uniform(200, 1500)
-            elif cat == "Shopping":
+            elif cat == "shopping":
                 amt = random.uniform(1000, 5000)
-            elif cat == "Utilities":
+            elif cat == "utilities":
                 amt = random.uniform(800, 2500)
-            elif cat == "Entertainment":
+            elif cat == "entertainment":
                 amt = random.uniform(199, 999)
-            elif cat == "Transport":
+            elif cat == "travel":
                 amt = random.uniform(100, 800)
             else:
                 amt = random.uniform(200, 2000)

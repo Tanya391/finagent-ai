@@ -1,22 +1,23 @@
 import { create } from 'zustand';
-import { getToken, clearToken } from '../services/api';
+import { api } from '../services/api';
 
-const useAuthStore = create((set) => ({
-  isLoggedIn: !!getToken(),
-  isLoading: false,
+export const useAuthStore = create((set) => ({
+  token: localStorage.getItem('access_token') || null,
+  user: JSON.parse(localStorage.getItem('finagent_user') || 'null'),
+  isAuthenticated: !!localStorage.getItem('access_token'),
 
-  setLoggedIn: (val) => set({ isLoggedIn: val }),
-  setLoading: (val) => set({ isLoading: val }),
+  setAuth: (token, user) => {
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('finagent_user', JSON.stringify(user));
+    set({ token, user, isAuthenticated: true });
+  },
 
-  logout: () => {
-    clearToken();
-    set({ isLoggedIn: false });
+  logout: async () => {
+    try {
+      await api.logout();
+    } catch (_) {}
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('finagent_user');
+    set({ token: null, user: null, isAuthenticated: false });
   },
 }));
-
-// Sync with storage events (multi-tab support)
-window.addEventListener('auth-change', () => {
-  useAuthStore.getState().setLoggedIn(!!getToken());
-});
-
-export default useAuthStore;

@@ -421,3 +421,40 @@ class UploadTransactionsView(generics.GenericAPIView):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+
+
+class TransactionListView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = _get_user_id(request)
+        search = request.query_params.get('search', '').lower()
+        category = request.query_params.get('category', '')
+        limit = int(request.query_params.get('limit', 100))
+        offset = int(request.query_params.get('offset', 0))
+
+        from .utils import get_db
+        db = get_db()
+        
+        query = {}
+        if user_id:
+            query['$or'] = [{'user_id': user_id}, {'user_id': {'$exists': False}}]
+            
+        if category:
+            query['category'] = {'$regex': f"^{category}$", '$options': 'i'}
+            
+        if search:
+            query['$or'] = [
+                {'receiver': {'$regex': search, '$options': 'i'}},
+                {'normalized_merchant': {'$regex': search, '$options': 'i'}},
+                {'description': {'$regex': search, '$options': 'i'}}
+            ]
+            
+        cursor = db.transactions.find(query, {'_id': 0}).sort('date', -1).skip(offset).limit(limit)
+        results = list(cursor)
+        count = db.transactions.count_documents(query)
+        
+        return Response({
+            'count': count,
+            'results': results
+        })

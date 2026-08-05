@@ -17,12 +17,10 @@ jobs:
       MONGO_URI: mongodb://localhost:27017
       DB_NAME: finagent_ai
       MONGO_TRANSACTIONS_COLLECTION: transactions
-      EMBEDDING_MODEL: all-MiniLM-L6-v2
       RAG_TOP_K: "8"
-      LLM_FALLBACK_ORDER: groq,huggingface
       LLM_TIMEOUT_SEC: "12"
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      GROQ_MODEL: llama-3.1-8b-instant
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: gemini-1.5-flash
 
     steps:
       - name: Checkout code

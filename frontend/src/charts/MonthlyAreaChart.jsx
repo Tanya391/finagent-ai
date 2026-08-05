@@ -1,44 +1,46 @@
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
+import React from 'react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
+export function MonthlyAreaChart({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-64 flex items-center justify-center text-slate-600 dark:text-slate-400 text-sm">
+        No monthly trends available.
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-700 rounded-xl px-3 py-2 shadow-lg text-xs space-y-1">
-      <p className="font-semibold text-zinc-700 dark:text-zinc-300">{label}</p>
-      {payload.map((p) => (
-        <p key={p.dataKey} style={{ color: p.color }}>
-          {p.name}: ₹{Number(p.value).toLocaleString('en-IN')}
-        </p>
-      ))}
+    <div className="w-full h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <defs>
+            <linearGradient id="netGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.5} />
+              <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+          <XAxis dataKey="month" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+          <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val / 1000}k`} />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (active && payload && payload.length) {
+                return (
+                  <div className="glass-card p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xl text-xs space-y-1">
+                    <p className="font-semibold text-slate-900 dark:text-slate-200">{label}</p>
+                    <p className="text-indigo-600 dark:text-indigo-400 font-mono-num font-bold">
+                      Net Flow: ₹{payload[0].value?.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Area type="monotone" dataKey="net" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#netGrad)" />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
-  );
-};
-
-export default function MonthlyAreaChart({ data = [] }) {
-  return (
-    <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" strokeOpacity={0.5} />
-        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false}
-          tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-        <Tooltip content={<CustomTooltip />} />
-        <Legend formatter={(v) => <span className="text-xs text-zinc-500 capitalize">{v}</span>} />
-        <Area type="monotone" dataKey="income" name="Income" stroke="#10b981" strokeWidth={2} fill="url(#incomeGrad)" />
-        <Area type="monotone" dataKey="expense" name="Expense" stroke="#ef4444" strokeWidth={2} fill="url(#expenseGrad)" />
-      </AreaChart>
-    </ResponsiveContainer>
   );
 }

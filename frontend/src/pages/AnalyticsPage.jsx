@@ -1,168 +1,136 @@
-import { motion } from 'framer-motion';
-import CategoryPieChart from '../charts/CategoryPieChart';
-import MerchantBarChart from '../charts/MerchantBarChart';
-import MonthlyAreaChart from '../charts/MonthlyAreaChart';
-import { SkeletonCard } from '../components/ui/Skeleton';
-import ErrorState from '../components/ui/ErrorState';
-import { useCategoryBreakdown, useTopMerchants, useMonthlySummary, useSubscriptions } from '../hooks/useAnalytics';
+import React from 'react';
+import { BarChart3, Repeat, Calendar, Building2, Layers, AlertCircle, ShieldCheck } from 'lucide-react';
+import {
+  useSubscriptions,
+  useTopMerchants,
+  useMonthlySummary,
+  useCategoryBreakdown,
+} from '../hooks/useAnalytics';
+import { MerchantBarChart } from '../charts/MerchantBarChart';
+import { MonthlyAreaChart } from '../charts/MonthlyAreaChart';
+import { CategoryPieChart } from '../charts/CategoryPieChart';
+import { Skeleton } from '../components/ui/Skeleton';
+import { ErrorState } from '../components/ui/ErrorState';
 
-function Panel({ title, badge, children, className = '' }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className={`bg-white dark:bg-[#13131f] rounded-2xl border border-slate-200 dark:border-[#1e1e30] p-5 ${className}`}
-    >
-      <div className="flex items-center gap-2 mb-5">
-        {badge && (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 uppercase tracking-wide">
-            {badge}
-          </span>
-        )}
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
-      </div>
-      {children}
-    </motion.div>
-  );
-}
+export function AnalyticsPage() {
+  const { data: subData, isLoading: isSubLoading, isError: isSubError, refetch: refetchSubs } = useSubscriptions();
+  const { data: merchantData } = useTopMerchants(10);
+  const { data: monthlyData } = useMonthlySummary();
+  const { data: categoryData } = useCategoryBreakdown();
 
-const BAR_COLORS = [
-  'bg-violet-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-amber-500',
-  'bg-rose-500',   'bg-sky-500',  'bg-fuchsia-500', 'bg-lime-500',
-];
+  const subscriptions = subData?.subscriptions || [];
+  const totalSubSpend = subscriptions.reduce((sum, s) => sum + (s.avg_amount || s.amount || 0), 0);
 
-function ProgressBar({ label, value, max, count, colorClass }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1.5">
-        <span className="font-medium text-slate-700 dark:text-slate-300 capitalize">{label.replace(/_/g, ' ')}</span>
-        <span className="text-slate-400 dark:text-slate-500">₹{Number(value).toLocaleString('en-IN')} · {count}</span>
-      </div>
-      <div className="h-1.5 bg-slate-100 dark:bg-[#1e1e30] rounded-full overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.7, ease: 'easeOut' }}
-          className={`h-1.5 ${colorClass} rounded-full`}
-        />
-      </div>
-    </div>
-  );
-}
-
-export default function AnalyticsPage() {
-  const { data: categories = [], isLoading: catLoading, error: catError, refetch: catRefetch } = useCategoryBreakdown();
-  const { data: merchants  = [], isLoading: merLoading } = useTopMerchants(8);
-  const { data: monthly    = [], isLoading: monLoading } = useMonthlySummary();
-  const { data: subs       = [], isLoading: subLoading } = useSubscriptions();
-
-  const maxCat = categories.length > 0 ? Math.max(...categories.map((d) => d.total)) : 1;
+  const topMerchants = merchantData?.top_merchants || [];
+  const monthlyList = monthlyData?.monthly_summary || [];
+  const categoryList = categoryData?.category_breakdown || [];
 
   return (
-    <div className="space-y-6">
-
-      {/* Category row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Panel title="Spending by Category" badge="PIE CHART">
-          {catLoading
-            ? <div className="h-64 animate-pulse bg-slate-100 dark:bg-[#1e1e30] rounded-xl" />
-            : catError
-            ? <ErrorState message={catError.message} onRetry={catRefetch} />
-            : <CategoryPieChart data={categories} />}
-        </Panel>
-
-        <Panel title="Category Breakdown" badge="RANKED">
-          {catLoading
-            ? <SkeletonCard lines={6} />
-            : (
-              <div className="space-y-3">
-                {categories.slice(0, 8).map((row, i) => (
-                  <ProgressBar
-                    key={row.category}
-                    label={row.category}
-                    value={row.total}
-                    max={maxCat}
-                    count={row.count}
-                    colorClass={BAR_COLORS[i % BAR_COLORS.length]}
-                  />
-                ))}
-              </div>
-            )}
-        </Panel>
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">Financial Intelligence Analytics</h2>
+        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+          Subscriptions, top merchants, category distribution, and historical trends.
+        </p>
       </div>
 
-      {/* Monthly trends */}
-      <Panel title="Monthly Income vs Expense" badge="AREA CHART">
-        {monLoading
-          ? <div className="h-56 animate-pulse bg-slate-100 dark:bg-[#1e1e30] rounded-xl" />
-          : <MonthlyAreaChart data={monthly} />}
-      </Panel>
-
-      {/* Merchants row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Panel title="Top Merchants" badge="BAR CHART">
-          {merLoading
-            ? <div className="h-56 animate-pulse bg-slate-100 dark:bg-[#1e1e30] rounded-xl" />
-            : <MerchantBarChart data={merchants} />}
-        </Panel>
-
-        <Panel title="Merchant Leaderboard" badge="TOP 8">
-          {merLoading
-            ? <SkeletonCard lines={8} />
-            : (
-              <div className="space-y-1.5">
-                {merchants.map((row, idx) => (
-                  <div
-                    key={row.merchant}
-                    className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#1a1a2e] hover:bg-violet-50 dark:hover:bg-violet-500/5 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-slate-300 dark:text-slate-600 w-4 text-right">{idx + 1}</span>
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200 capitalize">
-                        {row.merchant.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">₹{Number(row.total).toLocaleString('en-IN')}</p>
-                      <p className="text-[10px] text-slate-400">{row.count} txns</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-        </Panel>
-      </div>
-
-      {/* Subscriptions */}
-      <Panel title="Recurring Subscriptions" badge="DETECTED">
-        {subLoading
-          ? <SkeletonCard lines={4} />
-          : subs.length === 0
-          ? <p className="text-sm text-slate-400 italic py-6 text-center">No recurring charges detected yet.</p>
-          : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {subs.map((row) => (
-                <div
-                  key={row.merchant}
-                  className="p-4 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-100 dark:border-violet-500/20"
-                >
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize mb-2">
-                    {row.merchant.replace(/_/g, ' ')}
-                  </p>
-                  <p className="text-xl font-bold text-violet-600 dark:text-violet-400">
-                    ₹{Number(row.avg_amount).toLocaleString('en-IN')}
-                    <span className="text-xs font-normal text-slate-400 ml-1">/mo</span>
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1.5">
-                    {row.occurrences}× · ₹{Number(row.total_charged).toLocaleString('en-IN')} total
-                  </p>
-                </div>
-              ))}
+      {/* Subscriptions Card Cluster */}
+      <div className="glass-card p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-4">
+          <div className="flex items-center gap-2">
+            <Repeat className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Detected Active Subscriptions & Recurring Bills</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Detected recurring payment commitments</p>
             </div>
-          )}
-      </Panel>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-slate-600 dark:text-slate-400 block">Monthly Recurring Commitment</span>
+            <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400 font-mono-num">
+              ₹{totalSubSpend.toLocaleString('en-IN')} / mo
+            </span>
+          </div>
+        </div>
+
+        {isSubLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : isSubError ? (
+          <ErrorState onRetry={refetchSubs} />
+        ) : subscriptions.length === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-slate-500 py-4 text-center">No recurring subscriptions detected.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {subscriptions.map((sub, idx) => (
+              <div
+                key={idx}
+                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 flex items-center justify-between hover:border-indigo-400 dark:hover:border-indigo-500/30 transition"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">
+                    {sub.merchant?.[0] || 'S'}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{sub.merchant}</h4>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 capitalize">
+                      {sub.category || 'Recurring'} • <span className="text-indigo-600 dark:text-indigo-400 font-medium">{sub.frequency || 'Monthly'}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono-num">
+                    ₹{(sub.avg_amount || sub.amount || 0).toLocaleString('en-IN')}
+                  </span>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400">Last: {sub.last_date || sub.last_charged}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Analytics Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Merchants Chart */}
+        <div className="glass-card p-6 rounded-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Top 10 Merchants by Outflow</h3>
+            </div>
+            <span className="text-xs text-slate-600 dark:text-slate-400">Total debit volume</span>
+          </div>
+          <MerchantBarChart data={topMerchants} />
+        </div>
+
+        {/* Monthly Net Trends Chart */}
+        <div className="glass-card p-6 rounded-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Monthly Net Cashflow Trajectory</h3>
+            </div>
+            <span className="text-xs text-slate-600 dark:text-slate-400">Historical Net</span>
+          </div>
+          <MonthlyAreaChart data={monthlyList} />
+        </div>
+      </div>
+
+      {/* Category Distribution */}
+      <div className="glass-card p-6 rounded-2xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-4">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Category Expenditure Share</h3>
+          </div>
+          <span className="text-xs text-slate-600 dark:text-slate-400">Overall Expense Proportion</span>
+        </div>
+        <CategoryPieChart data={categoryList} />
+      </div>
     </div>
   );
 }

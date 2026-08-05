@@ -1,15 +1,23 @@
-export default function ErrorState({ message, onRetry }) {
+import React from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+
+export function ErrorState({ title = 'Failed to load data', message = 'Please check your connection or try again.', onRetry }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="text-3xl mb-3">⚠️</div>
-      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Something went wrong</p>
-      <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-4 max-w-xs">{message || 'An unexpected error occurred.'}</p>
+    <div className="glass-card p-8 rounded-2xl text-center flex flex-col items-center justify-center space-y-4 border border-rose-200 dark:border-rose-500/20 bg-rose-50/50 dark:bg-rose-950/10">
+      <div className="p-3 bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl border border-rose-200 dark:border-rose-500/20">
+        <AlertCircle className="w-8 h-8" />
+      </div>
+      <div>
+        <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h4>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-md">{message}</p>
+      </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-semibold rounded-xl transition border border-slate-200 dark:border-slate-700"
         >
-          Try again
+          <RefreshCw className="w-4 h-4" />
+          Retry Request
         </button>
       )}
     </div>

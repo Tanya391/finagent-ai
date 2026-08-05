@@ -1,15 +1,6 @@
-// In production (Render), VITE_API_BASE_URL is set to the backend URL.
-// In dev, the Vite proxy forwards /api to localhost:8000 so BASE_URL stays as /api/v1.
-const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_BASE_PATH ||
-  '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_PATH || '/api/v1';
 
-// ---------------------------------------------------------------------------
-// Token helpers
-// ---------------------------------------------------------------------------
 export const getToken = () => localStorage.getItem('access_token');
-export const setToken = (t) => localStorage.setItem('access_token', t);
 export const clearToken = () => localStorage.removeItem('access_token');
 
 export const getAuthHeader = () => {
@@ -17,10 +8,7 @@ export const getAuthHeader = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// ---------------------------------------------------------------------------
-// Core fetch wrapper
-// ---------------------------------------------------------------------------
-export const apiFetch = async (endpoint, options = {}) => {
+async function request(endpoint, options = {}) {
   const isFormData = options.body instanceof FormData;
   const headers = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -28,7 +16,12 @@ export const apiFetch = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+  const config = {
+    ...options,
+    headers,
+  };
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
   if (response.status === 401 || response.status === 403) {
     clearToken();
@@ -45,47 +38,41 @@ export const apiFetch = async (endpoint, options = {}) => {
     }
     throw new Error(message || `Request failed (${response.status})`);
   }
-
   return response.json();
-};
+}
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-export const authService = {
-  register: (data) => apiFetch('/auth/register/', { method: 'POST', body: JSON.stringify(data) }),
+export const api = {
+  // Status
+  getStatus: () => request('/status/'),
 
-  login: async (data) => {
-    const res = await apiFetch('/auth/login/', { method: 'POST', body: JSON.stringify(data) });
-    setToken(res.access);
-    window.dispatchEvent(new Event('auth-change'));
-    return res;
+  // Auth
+  login: (data) => request('/auth/login/', { method: 'POST', body: JSON.stringify(data) }),
+  register: (data) => request('/auth/register/', { method: 'POST', body: JSON.stringify(data) }),
+  logout: () => request('/auth/logout/', { method: 'POST' }),
+
+  // Analytics
+  getCashflow: () => request('/cashflow/'),
+  getMonthlySummary: (year) => request(`/monthly-summary/${year ? `?year=${year}` : ''}`),
+  getCategoryBreakdown: () => request('/spending-by-category/'),
+  getTopMerchants: (limit = 10) => request(`/top-merchants/?limit=${limit}`),
+  getSubscriptions: () => request('/subscriptions/'),
+
+  // Transactions
+  getTransactions: ({ search = '', category = '', limit = 100, offset = 0 } = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (category) params.append('category', category);
+    params.append('limit', limit);
+    params.append('offset', offset);
+    return request(`/transactions/?${params.toString()}`);
   },
 
-  logout: async () => {
-    try { await apiFetch('/auth/logout/', { method: 'POST' }); } catch (_) {}
-    clearToken();
-    window.dispatchEvent(new Event('auth-change'));
-  },
-};
+  // RAG / AI
+  askQuestion: (question) => request('/ask/', { method: 'POST', body: JSON.stringify({ question }) }),
+  retrieveSources: (question) => request('/retrieve/', { method: 'POST', body: JSON.stringify({ question }) }),
+  getQueryHistory: () => request('/history/'),
 
-// ---------------------------------------------------------------------------
-// Analytics
-// ---------------------------------------------------------------------------
-export const analyticsService = {
-  cashflow:          ()            => apiFetch('/cashflow/'),
-  monthlySummary:    (year)        => apiFetch(`/monthly-summary/${year ? `?year=${year}` : ''}`),
-  categoryBreakdown: ()            => apiFetch('/spending-by-category/'),
-  topMerchants:      (limit = 10)  => apiFetch(`/top-merchants/?limit=${limit}`),
-  subscriptions:     ()            => apiFetch('/subscriptions/'),
-  anomalies:         ()            => apiFetch('/anomalies/'),
-  status:            ()            => apiFetch('/status/'),
-};
-
-// ---------------------------------------------------------------------------
-// AI / Retrieval
-// ---------------------------------------------------------------------------
-export const aiService = {
-  ask:      (question, k = 8) => apiFetch('/ask/',      { method: 'POST', body: JSON.stringify({ question, k }) }),
-  retrieve: (question, k = 8) => apiFetch('/retrieve/', { method: 'POST', body: JSON.stringify({ question, k }) }),
+  // Data Management
+  uploadCSV: (formData) => request('/upload/', { method: 'POST', body: formData }),
+  seedDemoData: () => request('/seed/', { method: 'POST' }),
 };

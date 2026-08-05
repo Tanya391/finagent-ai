@@ -15,6 +15,7 @@ from .views import (
     SubscriptionsView,
     SeedDemoDataView,
     UploadTransactionsView,
+    TransactionListView,
     QueryHistoryView,
 )
 
@@ -43,4 +44,5 @@ urlpatterns = [
     # Data utilities
     path("seed/", SeedDemoDataView.as_view(), name="seed-demo-data"),
     path("upload/", UploadTransactionsView.as_view(), name="upload-transactions"),
+    path('transactions/', TransactionListView.as_view(), name='list-transactions'),
 ]

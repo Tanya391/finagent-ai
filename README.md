@@ -1,122 +1,41 @@
-# FinAgent AI 
+# FinAgent AI
 
-Beginner-friendly personal finance backend using Django, MongoDB, vector search, and RAG.
+FinAgent AI is an AI-powered personal finance dashboard that allows users to upload their transaction data and ask open-ended questions about their spending habits using Google Gemini.
 
-## Project Overview
-FinAgent AI is a backend-first personal finance assistant. It stores transaction data in MongoDB, retrieves relevant records with vector search (or regex fallback), and uses an LLM to answer questions grounded in those transactions.
+## 🏗️ Recent Architecture Modifications (Backend Hardening)
+This project has recently undergone a major architectural simplification and backend hardening:
+- **Vector Database (Qdrant) Removed:** Replaced with a lightweight, deterministic MongoDB document retrieval system.
+- **LLM Consolidation:** Removed Groq, HuggingFace, and local `sentence-transformers`. The application now exclusively uses the modern `google-genai` SDK with `gemini-3.5-flash` for all AI features.
+- **Deterministic Analytics:** Complex analytics and categorization are now 100% deterministic, meaning no AI hallucinations for precise financial calculations. AI is strictly reserved for natural language understanding and open-ended analysis.
+- **Removed Legacy "Anomalies":** The outdated anomalies detection feature has been removed.
+- **New Data Management:** Added endpoints to seed demo data (`/api/v1/seed/`) and upload CSV files (`/api/v1/upload/`).
+- **Query History:** User queries are now securely logged and can be fetched via `/api/v1/history/`.
 
-## Current Scope
-- User registration + JWT login/logout
-- Transaction retrieval with embeddings + MongoDB vector search
-- RAG answers with provider fallback (Groq or Hugging Face)
-- Optional scripts to generate CSVs and embeddings
+## 💻 Tech Stack
+- **Backend**: Django, Django REST Framework, PyMongo, Google GenAI SDK
+- **Frontend**: React, Vite, TailwindCSS, Zustand
+- **Database**: MongoDB
+- **Deployment**: Docker, Docker Compose (Ready for Render/GitHub Actions)
 
-## Future Scope 
-- Add first-class CSV ingestion API endpoint
-- Improve analytics endpoints (monthly summaries, category trends, cash-flow)
-- Add budget rules, alerts, and anomaly detection
-- Expand vector search to include balances and category tags
-- Add a production-ready deployment guide (Docker + Atlas + CI)
+## 🚀 Getting Started Locally
 
-## What This Project Includes
-- JWT-authenticated API with user registration/login
-- Transaction retrieval with vector search fallback to regex matching
-- RAG-style question answering backed by Groq or Hugging Face
-- Optional scripts for generating sample data and embeddings
+1. Clone the repository.
+2. Start the services using Docker:
+   ```bash
+   docker-compose up --build -d
+   ```
+3. The backend runs on `localhost:8000` and the frontend runs on `localhost:80`.
 
-## Project Structure
-- `backend/`: Django API + MongoDB integration
-- `data/`: sample CSV files
-- `scripts/`: helper scripts for generating CSV and embeddings
-- `frontend/`: simple React app (see `frontend/README.md`)
-
-## 1. Setup
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+### Environment Variables
+For the backend to work, provide the following in `backend/.env`:
+```env
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.5-flash
+MONGO_URI=mongodb://mongodb:27017
+SECRET_KEY=your_django_secret
+DEBUG=true
+ALLOWED_HOSTS=localhost,127.0.0.1
 ```
 
-Copy env template:
-```bash
-copy .env.example .env
-```
-
-Minimum required env values:
-- `MONGO_URI`
-- `DB_NAME`
-
-Optional but recommended:
-- `EMBEDDING_MODEL` for vector search embeddings
-- `GROQ_API_KEY` or `HF_API_KEY` for `/ask/` responses
-- `VECTOR_INDEX_NAME` if you created a custom MongoDB vector index name
-
-## 2. Run Backend
-```bash
-python manage.py runserver
-```
-
-Base URL:
-- `http://127.0.0.1:8000/api/v1/`
-
-## 3. Load Sample Data (Optional)
-Generate a CSV:
-```bash
-python scripts/generate_transactions.py
-```
-
-Ingest it from the Django shell:
-```bash
-cd backend
-python manage.py shell
-```
-
-```python
-from transactions.services import ingest_csv
-ingest_csv("../data/sample_transactions.csv", return_report=True)
-```
-
-If you already have transactions but no embeddings, generate them:
-```bash
-python scripts/generate_embeddings.py
-```
-
-Force-regenerate embeddings for all records:
-```bash
-python scripts/generate_embeddings.py --force
-```
-
-## 4. API Endpoints
-Health check:
-- `GET /api/v1/status/`
-
-Auth:
-- `POST /api/v1/auth/register/` -> create user
-- `POST /api/v1/auth/login/` -> returns JWT `access` and `refresh`
-- `POST /api/v1/auth/logout/` -> client-side token discard
-
-Protected endpoints require:
-- `Authorization: Bearer <access-token>`
-
-Retrieve transactions (vector search first, regex fallback):
-- `POST /api/v1/retrieve/`
-- `GET /api/v1/retrieve/?question=...&k=8`
-
-Ask a question with RAG:
-- `POST /api/v1/ask/`
-- `GET /api/v1/ask/?question=...&k=8`
-
-Example request body:
-```json
-{ "question": "recent grocery spends", "k": 8 }
-```
-
-Notes:
-- `score` appears only when vector search is available.
-- `/ask/` uses `LLM_FALLBACK_ORDER` and returns `provider` + `provider_errors`.
-
-## 5. Tests
-```bash
-python manage.py test transactions -v 2
-```
+## 🧪 Testing
+The backend has been rigorously tested across a 30-phase verification checklist covering deterministic routing, data isolation, exact analytics output, file ingestion, error handling, and robust AI grounding without hallucinations.

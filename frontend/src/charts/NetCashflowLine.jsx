@@ -1,39 +1,100 @@
+import React from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  const val = payload[0].value;
-  return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-700 rounded-xl px-3 py-2 shadow-lg text-xs">
-      <p className="font-semibold text-zinc-700 dark:text-zinc-300 mb-1">{label}</p>
-      <p className={val >= 0 ? 'text-emerald-500' : 'text-red-500'}>
-        Net: ₹{Number(val).toLocaleString('en-IN')}
-      </p>
-    </div>
-  );
-};
+export function NetCashflowLine({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-64 flex items-center justify-center text-slate-600 dark:text-slate-400 text-sm">
+        No monthly cashflow data available.
+      </div>
+    );
+  }
 
-export default function NetCashflowLine({ data = [] }) {
+  const formattedData = data.map((item) => ({
+    month: item.month,
+    Income: item.income,
+    Expense: item.expense,
+    Net: item.net,
+  }));
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="glass-card p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xl text-xs space-y-1.5">
+          <p className="font-semibold text-slate-900 dark:text-slate-200">{label}</p>
+          {payload.map((entry, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-4">
+              <span className="flex items-center gap-1.5" style={{ color: entry.color }}>
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                {entry.name}:
+              </span>
+              <span className="font-mono-num font-bold text-slate-900 dark:text-slate-100">
+                ₹{entry.value?.toLocaleString('en-IN')}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" strokeOpacity={0.5} />
-        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false}
-          tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-        <Tooltip content={<CustomTooltip />} />
-        <ReferenceLine y={0} stroke="#a1a1aa" strokeDasharray="4 4" />
-        <Line
-          type="monotone"
-          dataKey="net"
-          stroke="#6366f1"
-          strokeWidth={2.5}
-          dot={{ r: 3, fill: '#6366f1' }}
-          activeDot={{ r: 5 }}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="w-full h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={formattedData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <defs>
+            <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+            </linearGradient>
+            <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+          <XAxis
+            dataKey="month"
+            stroke="#64748b"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis
+            stroke="#64748b"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(val) => `₹${val / 1000}k`}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="Income"
+            stroke="#10b981"
+            strokeWidth={2.5}
+            fillOpacity={1}
+            fill="url(#incomeGrad)"
+          />
+          <Area
+            type="monotone"
+            dataKey="Expense"
+            stroke="#f43f5e"
+            strokeWidth={2.5}
+            fillOpacity={1}
+            fill="url(#expenseGrad)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

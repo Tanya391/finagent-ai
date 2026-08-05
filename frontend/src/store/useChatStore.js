@@ -1,62 +1,29 @@
 import { create } from 'zustand';
 
-const useChatStore = create((set, get) => ({
-  messages: [],   // { id, role: 'user'|'assistant', content, data, sources, provider, route, intent, confidence, timestamp, isLoading, error }
-  queryHistory: [], // { id, question, timestamp, intent, route }
-
-  addUserMessage: (question) => {
-    const id = Date.now();
+export const useChatStore = create((set) => ({
+  messages: [
+    {
+      id: 'msg_1',
+      sender: 'assistant',
+      text: 'Hello! I am FinAgent AI, your personal financial intelligence assistant. How can I analyze your cashflow or transactions today?',
+      sources: [],
+      timestamp: new Date().toISOString(),
+    },
+  ],
+  addMessage: (message) =>
     set((state) => ({
+      messages: [...state.messages, { ...message, id: `msg_${Date.now()}` }],
+    })),
+  clearMessages: () =>
+    set({
       messages: [
-        ...state.messages,
-        { id, role: 'user', content: question, timestamp: new Date().toISOString() },
+        {
+          id: 'msg_init',
+          sender: 'assistant',
+          text: 'Conversation reset. Ask me anything about your income, expenses, subscriptions, or top merchants!',
+          sources: [],
+          timestamp: new Date().toISOString(),
+        },
       ],
-    }));
-    return id;
-  },
-
-  addLoadingMessage: () => {
-    const id = Date.now() + 1;
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        { id, role: 'assistant', content: '', isLoading: true, timestamp: new Date().toISOString() },
-      ],
-    }));
-    return id;
-  },
-
-  resolveMessage: (id, payload) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, ...payload, isLoading: false } : m
-      ),
-    }));
-  },
-
-  setMessageError: (id, error) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, error, isLoading: false } : m
-      ),
-    }));
-  },
-
-  retryMessage: (id) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, error: null, isLoading: true } : m
-      ),
-    }));
-  },
-
-  addToHistory: (entry) => {
-    set((state) => ({
-      queryHistory: [entry, ...state.queryHistory].slice(0, 50),
-    }));
-  },
-
-  clearChat: () => set({ messages: [] }),
+    }),
 }));
-
-export default useChatStore;

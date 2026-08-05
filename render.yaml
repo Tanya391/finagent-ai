@@ -33,28 +33,10 @@ services:
         value: all-MiniLM-L6-v2
       - key: RAG_TOP_K
         value: 8
-      - key: QDRANT_URL
+      - key: GEMINI_API_KEY
         sync: false
-      - key: QDRANT_API_KEY
-        sync: false
-      - key: QDRANT_COLLECTION
-        value: transactions
-      - key: QDRANT_VECTOR_SIZE
-        value: 384
-      - key: LLM_FALLBACK_ORDER
-        value: groq,huggingface
-      - key: LLM_TIMEOUT_SEC
-        value: 12
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
-      - key: HF_API_KEY
-        sync: false
-      - key: HF_MODEL
-        value: meta-llama/Llama-3.1-8B-Instruct
-      - key: HF_BASE_URL
-        value: https://router.huggingface.co/v1/chat/completions
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
 
   # ---------------------------------------------------------------------------
   # Frontend — pulls Docker image from DockerHub
