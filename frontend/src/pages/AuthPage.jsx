@@ -25,8 +25,10 @@ export function AuthPage() {
         const res = await api.login({ username: username || 'demo_user', password });
         setAuth(res.access || 'mock_token', res.user || { username: username || 'Demo User', email: 'user@finagent.ai' });
       } else {
-        const res = await api.register({ username, email, password });
-        setAuth('mock_token', res.user || { username, email });
+        await api.register({ username, email, password });
+        // Automatically sign them in to get a real JWT token instead of a mock token
+        const loginRes = await api.login({ username, password });
+        setAuth(loginRes.access, loginRes.user || { username, email });
       }
       navigate('/');
     } catch (err) {
