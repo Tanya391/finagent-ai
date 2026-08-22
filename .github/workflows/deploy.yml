@@ -73,7 +73,7 @@ jobs:
           cd frontend
           npm run build
         env:
-          VITE_API_BASE_URL: https://finagent-server.onrender.com/api/v1
+          VITE_API_BASE_URL: https://finagent-backend-szan.onrender.com/api/v1
 
   # ── 3. Build & Push Docker Images ────────────────────────────────────────────
   build-push:
@@ -116,7 +116,7 @@ jobs:
             tanya391/finagent-ui:latest
             tanya391/finagent-ui:${{ github.sha }}
           build-args: |
-            VITE_API_BASE_URL=https://finagent-server.onrender.com/api/v1
+            VITE_API_BASE_URL=https://finagent-backend-szan.onrender.com/api/v1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
