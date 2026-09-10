@@ -8,7 +8,7 @@ The LLM never performs calculations. This module handles all math:
   - top merchants
   - cashflow (income vs expense)
   - subscription detection
-  - anomaly detection (z-score based)
+
   - period comparison
   - category trend analysis
 

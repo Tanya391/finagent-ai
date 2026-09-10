@@ -2,7 +2,7 @@
 Query Understanding Layer — converts natural language into structured financial intent.
 
 Extracts:
-  - intent: what the user wants (sum, list, trend, compare, explain, anomaly, subscription)
+  - intent: what the user wants (sum, list, trend, compare, explain, subscription)
   - category: spending category if mentioned
   - merchant: normalized merchant name if mentioned
   - date_from / date_to: date range
@@ -245,7 +245,7 @@ def _extract_intent(text: str) -> str:
         for pattern in patterns:
             if pattern.search(text):
                 return intent
-    return "semantic_search"  # default — use vector retrieval
+    return "semantic_search"  # default — use deterministic retrieval
 
 
 # ---------------------------------------------------------------------------

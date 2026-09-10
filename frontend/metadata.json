@@ -1,6 +1,6 @@
 {
   "name": "FinAgent AI",
-  "description": "Financial AI Agent providing real-time transaction analytics, RAG financial assistant, subscription detection, and anomaly alerts.",
+  "description": "Financial AI Agent providing real-time transaction analytics, RAG financial assistant, and subscription detection.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

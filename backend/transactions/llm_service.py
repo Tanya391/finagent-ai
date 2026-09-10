@@ -8,7 +8,7 @@ from google import genai
 # ---------------------------------------------------------------------------
 # Simple in-memory response cache
 # Caches LLM answers by (question + transaction IDs) so repeated identical
-# queries don't make a second network call to Groq.
+# queries don't make a second network call to Gemini.
 # Cache is cleared on server restart — no persistence needed for dev.
 # ---------------------------------------------------------------------------
 _RESPONSE_CACHE: dict[str, dict] = {}
