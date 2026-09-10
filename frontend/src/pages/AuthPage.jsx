@@ -21,14 +21,19 @@ export function AuthPage() {
     setLoading(true);
 
     try {
+      const trimmedUsername = username.trim();
+      
       if (isLogin) {
-        const res = await api.login({ username: username || 'demo_user', password });
-        setAuth(res.access || 'mock_token', res.user || { username: username || 'Demo User', email: 'user@finagent.ai' });
+        const res = await api.login({ username: trimmedUsername, password });
+        // Make sure we use the real token, never a mock token that causes 401
+        if (!res.access) throw new Error("No access token received");
+        setAuth(res.access, res.user || { username: trimmedUsername, email: 'user@finagent.ai' });
       } else {
-        await api.register({ username, email, password });
-        // Automatically sign them in to get a real JWT token instead of a mock token
-        const loginRes = await api.login({ username, password });
-        setAuth(loginRes.access, loginRes.user || { username, email });
+        await api.register({ username: trimmedUsername, email, password });
+        // Automatically sign them in to get a real JWT token
+        const loginRes = await api.login({ username: trimmedUsername, password });
+        if (!loginRes.access) throw new Error("No access token received after register");
+        setAuth(loginRes.access, loginRes.user || { username: trimmedUsername, email });
       }
       navigate('/');
     } catch (err) {
